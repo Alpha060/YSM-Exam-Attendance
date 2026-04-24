@@ -11,7 +11,7 @@ import { useRealtimeData } from '@/hooks/useRealtimeData';
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -109,7 +109,7 @@ export default function ReportsPage() {
         if (!user) return '';
         const hour = new Date().getHours();
         const greeting = hour < 12 ? 'Good Morning' : hour < 17 ? 'Good Afternoon' : 'Good Evening';
-        const roleLabel = user.role === 'super_admin' ? 'Admin' : user.role === 'hod' ? 'HOD' : 'Teacher';
+        const roleLabel = user.role === 'super_admin' ? 'Admin' : 'Teacher';
         return `${greeting}, ${user.firstName}!`;
     };
 
@@ -170,8 +170,8 @@ export default function ReportsPage() {
         // Department Overview - for HOD and Super Admin only
         ...(user && user.role !== 'teacher' ? [{
             id: 'department',
-            title: 'Department Overview',
-            description: 'Semester & subject analytics',
+            title: 'Batch Overview',
+            description: 'Batch & subject analytics',
             icon: Building2,
             color: 'bg-teal-500',
             gradient: 'from-teal-500 to-teal-600',
@@ -210,7 +210,7 @@ export default function ReportsPage() {
         ];
 
         // Add role-specific stats
-        if (user?.role === 'super_admin' || user?.role === 'hod') {
+        if (user?.role === 'super_admin') {
             if (stats.lowAttendanceCount !== undefined) {
                 baseStats.push({
                     label: 'Critical (<60%)',
@@ -298,7 +298,7 @@ export default function ReportsPage() {
                 </div>
 
                 {/* HOD/Admin - Alerts Section */}
-                {(user?.role === 'hod' || user?.role === 'super_admin') && (stats.lowAttendanceCount || stats.warningAttendanceCount) ? (
+                {user?.role === 'super_admin' && (stats.lowAttendanceCount || stats.warningAttendanceCount) ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         {/* Low Attendance Alert */}
                         {(stats.lowAttendanceCount || 0) > 0 && (

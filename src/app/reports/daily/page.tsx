@@ -8,11 +8,11 @@ import { Calendar, Users, UserCheck, UserX, ArrowLeft, Filter, Search, ChevronDo
 import * as XLSX from 'xlsx';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
-import { useActiveSemesters } from '@/hooks/useActiveSemesters';
+
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -71,16 +71,13 @@ function DailyReportContent() {
         return `${year}-${month}-${day}`;
     });
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
-    const [selectedSemester, setSelectedSemester] = useState('');
     const [selectedSubjectId, setSelectedSubjectId] = useState('');
 
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
     const [lecturesSummary, setLecturesSummary] = useState<LectureSummary[]>([]);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const { getActiveSemesters, getBatchLabel } = useActiveSemesters();
 
-    // Helper to get dept type from either field name convention
-    const getDeptType = (dept?: Department) => dept?.deptType || dept?.dept_type;
+
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -95,7 +92,7 @@ function DailyReportContent() {
         // Fetch departments for super_admin or teacher with multiple depts
         if (parsedUser.role === 'super_admin') {
             fetchDepartments(token);
-        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'hod') {
+        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'super_admin') {
             fetchTeacherDepartments(token, parsedUser.id);
         }
     }, [router]);
@@ -117,15 +114,15 @@ function DailyReportContent() {
         if (token && user) {
             fetchDailyReport(token);
         }
-    }, [selectedDate, selectedDepartmentId, selectedSemester, selectedSubjectId, user]);
+    }, [selectedDate, selectedDepartmentId, selectedSubjectId, user]);
 
-    // Fetch subjects when semester changes
+    // Fetch subjects when batch changes
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token) {
             fetchSubjects(token);
         }
-    }, [selectedSemester, selectedDepartmentId]);
+    }, [selectedDepartmentId]);
 
     const getCachedDepartments = () => {
         try {
@@ -185,11 +182,10 @@ function DailyReportContent() {
         }
     };
 
-    // Fetch subjects based on selected semester
+    // Fetch subjects based on selected batch
     const fetchSubjects = async (token: string) => {
         try {
             const params = new URLSearchParams();
-            if (selectedSemester) params.append('semester', selectedSemester);
             if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
             let url = '/api/subjects';
             if (params.toString()) url += '?' + params.toString();
@@ -198,7 +194,7 @@ function DailyReportContent() {
             });
             const data = await res.json();
             setSubjects(data.subjects || []);
-            // Reset subject selection when semester changes
+            // Reset subject selection when batch changes
             setSelectedSubjectId('');
         } catch (err) {
             console.error('Error fetching subjects:', err);
@@ -211,9 +207,6 @@ function DailyReportContent() {
             let url = `/api/reports/daily?date=${selectedDate}`;
             if (selectedDepartmentId) {
                 url += `&departmentId=${selectedDepartmentId}`;
-            }
-            if (selectedSemester) {
-                url += `&semester=${selectedSemester}`;
             }
             if (selectedSubjectId) {
                 url += `&subjectId=${selectedSubjectId}`;
@@ -277,9 +270,7 @@ function DailyReportContent() {
             if (selectedDepartmentId) {
                 url += `&departmentId=${selectedDepartmentId}`;
             }
-            if (selectedSemester) {
-                url += `&semester=${selectedSemester}`;
-            }
+
             if (selectedSubjectId) {
                 url += `&subjectId=${selectedSubjectId}`;
             }
@@ -426,8 +417,7 @@ function DailyReportContent() {
         <div class="filters-info">
             <strong>Filters Applied:</strong> 
             Subject: ${getSelectedSubjectName()} | 
-            Semester: ${selectedSemester || 'All'} | 
-            Department: ${selectedDepartmentId ? departments.find(d => d.id === selectedDepartmentId)?.name || 'Selected' : 'All'}
+            Batch: ${selectedDepartmentId ? departments.find(d => d.id === selectedDepartmentId)?.name || 'Selected' : 'All'}
         </div>
         <div class="summary-cards">
             <div class="summary-card">
@@ -629,14 +619,14 @@ function DailyReportContent() {
                         {/* Department Filter */}
                         {(user?.role === 'super_admin' || departments.length > 1) && (
                             <div className="w-full">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Department</label>
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                 <div className="relative">
                                     <select
                                         value={selectedDepartmentId}
                                         onChange={(e) => { setSelectedDepartmentId(e.target.value); }}
                                         className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-blue-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium"
                                     >
-                                        <option value="">All Departments</option>
+                                        <option value="">All Batches</option>
                                         {departments.map((dept) => (
                                             <option key={dept.id} value={dept.id}>{dept.name}</option>
                                         ))}
@@ -646,31 +636,6 @@ function DailyReportContent() {
                             </div>
                         )}
 
-                        {/* Semester Filter */}
-                        <div className="w-full">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Semester</label>
-                            <div className="relative">
-                                <select
-                                    value={selectedSemester}
-                                    onChange={(e) => setSelectedSemester(e.target.value)}
-                                    className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-blue-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium"
-                                >
-                                    <option value="">All Semesters</option>
-                                    {(() => {
-                                        const effectiveDeptType = selectedDepartmentId
-                                            ? getDeptType(departments.find(d => d.id === selectedDepartmentId))
-                                            : (user?.role === 'super_admin' ? 'regular' : (departments.length > 0 ? getDeptType(departments[0]) : 'regular'));
-                                        return getActiveSemesters(effectiveDeptType).map((sem) => {
-                                            const label = getBatchLabel(sem, effectiveDeptType);
-                                            return (
-                                                <option key={sem} value={sem}>Sem {sem}{label ? ` (${label})` : ''}</option>
-                                            );
-                                        });
-                                    })()}
-                                </select>
-                                <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
-                            </div>
-                        </div>
 
 
 
@@ -700,7 +665,7 @@ function DailyReportContent() {
                                 variant="outline"
                                 className="w-full lg:w-auto mt-6 bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 border-gray-200 hover:border-red-200 rounded-xl transition-colors h-[42px]"
                                 onClick={() => {
-                                    setSelectedSemester('');
+
                                     setSelectedDepartmentId('');
                                     setSelectedSubjectId('');
                                 }}
@@ -835,8 +800,7 @@ function DailyReportContent() {
                                         <th className="px-4 py-3 text-left text-xs font-bold text-indigo-600 uppercase tracking-wider">Lec #</th>
                                         <th className="px-4 py-3 text-left text-xs font-bold text-indigo-600 uppercase tracking-wider">Subject</th>
                                         <th className="px-4 py-3 text-left text-xs font-bold text-indigo-600 uppercase tracking-wider">Teacher</th>
-                                        <th className="px-4 py-3 text-left text-xs font-bold text-indigo-600 uppercase tracking-wider">Department</th>
-                                        <th className="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider">Semester</th>
+                                        <th className="px-4 py-3 text-left text-xs font-bold text-indigo-600 uppercase tracking-wider">Batch</th>
                                         <th className="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider">Total</th>
                                         <th className="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider">Present</th>
                                         <th className="px-4 py-3 text-center text-xs font-bold text-indigo-600 uppercase tracking-wider">Absent</th>
@@ -862,11 +826,6 @@ function DailyReportContent() {
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <span className="text-sm text-gray-700">{lec.departmentNames || '—'}</span>
-                                                </td>
-                                                <td className="px-4 py-3 text-center">
-                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs font-bold">
-                                                        Sem {lec.semester}
-                                                    </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-center text-sm font-medium text-gray-700">{lec.totalStudents}</td>
                                                 <td className="px-4 py-3 text-center">
@@ -908,8 +867,6 @@ function DailyReportContent() {
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2 mb-3 text-xs">
-                                            <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-bold">Sem {lec.semester}</span>
-                                            <span className="text-gray-400">•</span>
                                             <span className="text-gray-600">{lec.departmentNames || '—'}</span>
                                         </div>
                                         {lec.teacherName && (

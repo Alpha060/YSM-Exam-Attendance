@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button';
 import { CalendarDays, TrendingUp, TrendingDown, BarChart3, Filter, ChevronDown, AlertCircle } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
-import { useActiveSemesters } from '@/hooks/useActiveSemesters';
+
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -51,14 +51,10 @@ function MonthlyReportContent() {
     const [departments, setDepartments] = useState<Department[]>([]);
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
-    const [selectedSemester, setSelectedSemester] = useState('');
 
     const [stats, setStats] = useState<MonthlyStats | null>(null);
     const [dailyBreakdown, setDailyBreakdown] = useState<DailyBreakdown[]>([]);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const { getActiveSemesters, getBatchLabel } = useActiveSemesters();
-
-    const getDeptType = (dept?: Department) => dept?.deptType || dept?.dept_type;
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -72,7 +68,7 @@ function MonthlyReportContent() {
 
         if (parsedUser.role === 'super_admin') {
             fetchDepartments(token);
-        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'hod') {
+        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'super_admin') {
             fetchTeacherDepartments(token, parsedUser.id);
         }
     }, [router]);
@@ -94,7 +90,7 @@ function MonthlyReportContent() {
         if (token && user) {
             fetchMonthlyReport(token);
         }
-    }, [selectedMonth, selectedDepartmentId, selectedSemester, user]);
+    }, [selectedMonth, selectedDepartmentId, user]);
 
     const getCachedDepartments = () => {
         try {
@@ -158,7 +154,6 @@ function MonthlyReportContent() {
         try {
             let url = `/api/reports/monthly?month=${selectedMonth}`;
             if (selectedDepartmentId) url += `&departmentId=${selectedDepartmentId}`;
-            if (selectedSemester) url += `&semester=${selectedSemester}`;
             if (viewParam) url += `&view=${viewParam}`;
 
             const res = await fetch(url, {
@@ -245,14 +240,14 @@ function MonthlyReportContent() {
 
                             {(user?.role === 'super_admin' || departments.length > 1) && (
                                 <div className="w-full">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Department</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                     <div className="relative">
                                         <select
                                             value={selectedDepartmentId}
                                             onChange={(e) => setSelectedDepartmentId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-emerald-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
-                                            <option value="">All Departments</option>
+                                            <option value="">All Batches</option>
                                             {departments.map((dept) => (
                                                 <option key={dept.id} value={dept.id}>{dept.name}</option>
                                             ))}
@@ -262,37 +257,11 @@ function MonthlyReportContent() {
                                 </div>
                             )}
 
-                            <div className="w-full">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Semester</label>
-                                <div className="relative">
-                                    <select
-                                        value={selectedSemester}
-                                        onChange={(e) => setSelectedSemester(e.target.value)}
-                                        className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-emerald-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
-                                    >
-                                        <option value="">All Semesters</option>
-                                        {(() => {
-                                            const effectiveDeptType = selectedDepartmentId 
-                                                ? getDeptType(departments.find(d => d.id === selectedDepartmentId)) 
-                                                : (user?.role === 'super_admin' ? 'regular' : (departments.length > 0 ? getDeptType(departments[0]) : 'regular'));
-                                            return getActiveSemesters(effectiveDeptType).map((sem) => {
-                                                const label = getBatchLabel(sem, effectiveDeptType);
-                                                return (
-                                                    <option key={sem} value={sem}>Sem {sem}{label ? ` (${label})` : ''}</option>
-                                                );
-                                            });
-                                        })()}
-                                    </select>
-                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
-                                </div>
-                            </div>
-
                             <div className="w-full lg:w-auto">
                                 <Button
                                     variant="outline"
                                     className="w-full lg:w-auto mt-6 bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 border-gray-200 hover:border-red-200 rounded-xl transition-colors h-[42px]"
                                     onClick={() => {
-                                        setSelectedSemester('');
                                         setSelectedDepartmentId('');
                                         setSelectedMonth(new Date().toISOString().slice(0, 7));
                                     }}

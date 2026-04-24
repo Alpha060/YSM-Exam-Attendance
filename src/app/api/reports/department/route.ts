@@ -6,7 +6,6 @@ interface DepartmentInfo {
     id: string;
     name: string;
     code: string;
-    degree_type: string;
 }
 
 interface SemesterStats {
@@ -61,27 +60,14 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Department ID required' }, { status: 400 });
         }
 
-        // Security check for HOD: Verify they have access to this selectedDeptId
-        if (role === 'hod') {
-            const hasAccess = await queryOne<{ allowed: boolean }>(
-                `SELECT EXISTS (
-                    SELECT 1 FROM users WHERE id = $1 AND department_id = $2
-                    UNION
-                    SELECT 1 FROM user_departments WHERE user_id = $1 AND department_id = $2
-                ) as allowed`,
-                [userId, selectedDeptId]
-            );
-            if (!hasAccess || !hasAccess.allowed) {
-                return NextResponse.json({ error: 'Access denied to this department' }, { status: 403 });
-            }
-        }
+        // Security check: super_admin has access to all departments
 
         const params: string[] = [selectedDeptId];
         const subjectParams: string[] = [selectedDeptId];
 
-        // 1. Get department info including degree_type
+        // 1. Get department info
         const deptInfo = await queryOne<DepartmentInfo>(
-            `SELECT id, name, code, degree_type FROM departments WHERE id = $1`,
+            `SELECT id, name, code FROM departments WHERE id = $1`,
             [selectedDeptId]
         );
 
@@ -112,7 +98,7 @@ export async function GET(request: NextRequest) {
             params
         );
 
-        // 3. Get subject-wise stats using degree_type to link subjects
+        // 3. Get subject-wise stats using department_id to link subjects
         const subjectStats = await query<SubjectStats>(
             `SELECT 
                 sub.id,
@@ -136,10 +122,10 @@ export async function GET(request: NextRequest) {
             LEFT JOIN student_subjects ss ON ss.subject_id = sub.id
             LEFT JOIN students st ON ss.student_id = st.id AND st.department_id = $1
             LEFT JOIN attendance_records ar ON ar.subject_id = sub.id AND ar.student_id = st.id
-            WHERE sub.degree_type = $2
+            WHERE sub.department_id = $1
             GROUP BY sub.id, sub.name, sub.code
             ORDER BY sub.code, sub.name`,
-            (() => { subjectParams[1] = deptInfo.degree_type; return subjectParams; })()
+            [selectedDeptId]
         );
 
         // 4. Get critical students (<60% attendance)
@@ -219,7 +205,6 @@ export async function GET(request: NextRequest) {
                 id: deptInfo.id,
                 name: deptInfo.name,
                 code: deptInfo.code,
-                degreeType: deptInfo.degree_type,
             },
 
             overallStats: {

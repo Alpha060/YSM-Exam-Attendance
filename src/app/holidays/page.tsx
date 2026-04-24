@@ -24,7 +24,7 @@ interface Holiday {
 }
 
 interface User {
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     departmentId?: string;
 }
 
@@ -298,7 +298,7 @@ export default function HolidaysPage() {
     }
 
     const isSuperAdmin = user?.role === 'super_admin';
-    const isHOD = user?.role === 'hod';
+    const isHOD = user?.role === 'super_admin';
     const canManageHolidays = isSuperAdmin || isHOD;
 
     return (

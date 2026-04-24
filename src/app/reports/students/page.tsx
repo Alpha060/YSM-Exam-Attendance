@@ -9,11 +9,11 @@ import * as XLSX from 'xlsx';
 import { Input } from '@/components/ui/input';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
-import { useActiveSemesters } from '@/hooks/useActiveSemesters';
+
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -98,7 +98,7 @@ function StudentReportContent() {
     const [students, setStudents] = useState<StudentAttendance[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
-    const [selectedSemester, setSelectedSemester] = useState('');
+
 
     const [showSearch, setShowSearch] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -124,9 +124,7 @@ function StudentReportContent() {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-    const { getActiveSemesters, getBatchLabel } = useActiveSemesters();
 
-    const getDeptType = (dept?: Department) => dept?.deptType || dept?.dept_type;
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -140,7 +138,7 @@ function StudentReportContent() {
 
         if (parsedUser.role === 'super_admin') {
             fetchDepartments(token);
-        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'hod') {
+        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'super_admin') {
             fetchTeacherDepartments(token, parsedUser.id);
         }
     }, [router]);
@@ -164,20 +162,19 @@ function StudentReportContent() {
         if (token && user) {
             fetchStudentReport(token);
         }
-    }, [selectedDepartmentId, selectedSemester, selectedSubjectsStr, user, startDate, endDate]);
+    }, [selectedDepartmentId, selectedSubjectsStr, user, startDate, endDate]);
 
-    // Fetch subjects when department/semester changes
+    // Fetch subjects when batch changes
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token && user) {
             fetchSubjects(token);
         }
-    }, [selectedDepartmentId, selectedSemester, user]);
+    }, [selectedDepartmentId, user]);
 
     const fetchSubjects = async (token: string) => {
         try {
             const params = new URLSearchParams();
-            if (selectedSemester) params.append('semester', selectedSemester);
             if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
             let url = '/api/subjects';
             if (params.toString()) url += '?' + params.toString();
@@ -264,7 +261,6 @@ function StudentReportContent() {
             let url = '/api/reports/students';
             const params = new URLSearchParams();
             if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
-            if (selectedSemester) params.append('semester', selectedSemester);
             if (startDate) params.append('startDate', startDate);
             if (endDate) params.append('endDate', endDate);
             if (viewParam) params.append('view', viewParam);
@@ -711,8 +707,7 @@ function StudentReportContent() {
                     <div class="student-roll">Student ID: ${student.studentId || '-'} | Roll No: ${student.rollNumber}</div>
                 </div>
                 <div class="meta-values">
-                    <div class="meta-row"><strong>Department:</strong> ${student.department}</div>
-                    <div class="meta-row"><strong>Semester:</strong> ${student.semester}</div>
+                    <div class="meta-row"><strong>Batch:</strong> ${student.department}</div>
                     <div class="meta-row"><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
                 </div>
             </div>
@@ -893,8 +888,7 @@ function StudentReportContent() {
 
         const metadataRows = [
             ['Generated on:', new Date().toLocaleDateString()],
-            ['Department:', deptName],
-            ['Semester:', selectedSemester || 'All'],
+            ['Batch:', deptName],
             ['Subjects:', subjectFilterText],
             [] // Empty row spacer
         ];
@@ -964,7 +958,7 @@ function StudentReportContent() {
             <p>Attendance Overview</p>
         </div>
     </div>
-    <p class="meta"><strong>Filters Applied:</strong> Generated on: ${new Date().toLocaleDateString()} | Total Students: ${filteredStudents.length}${selectedSemester ? (() => { const now = new Date(); const acYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1; const admYear = acYear - (parseInt(selectedSemester) - 1); const dept = departments.find(d => d.id === selectedDepartmentId); const duration = dept?.dept_type === 'vocational' ? 3 : dept?.dept_type === 'pg' ? 2 : 4; const gradYear = admYear + duration; return ` | Semester: ${selectedSemester} | Batch: ${admYear}-${String(gradYear).slice(2)}`; })() : ''}${selectedDepartmentId ? ` | Department: ${departments.find(d => d.id === selectedDepartmentId)?.name || ''}` : ''}<br/><strong>Subjects:</strong> ${subjectFilterText}</p>
+    <p class="meta"><strong>Filters Applied:</strong> Generated on: ${new Date().toLocaleDateString()} | Total Students: ${filteredStudents.length}${selectedDepartmentId ? ` | Batch: ${departments.find(d => d.id === selectedDepartmentId)?.name || ''}` : ''}<br/><strong>Subjects:</strong> ${subjectFilterText}</p>
     <table>
         <thead>
             <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
@@ -1108,14 +1102,14 @@ function StudentReportContent() {
                             {/* Department Filter */}
                             {(user?.role === 'super_admin' || departments.length > 1) && (
                                 <div className="w-full">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Department</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                     <div className="relative">
                                         <select
                                             value={selectedDepartmentId}
                                             onChange={(e) => setSelectedDepartmentId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-purple-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
-                                            <option value="">All Departments</option>
+                                            <option value="">All Batches</option>
                                             {departments.map((dept) => (
                                                 <option key={dept.id} value={dept.id}>{dept.name}</option>
                                             ))}
@@ -1126,32 +1120,6 @@ function StudentReportContent() {
                             )}
 
 
-
-                            {/* Semester Filter */}
-                            <div className="w-full">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Semester</label>
-                                <div className="relative">
-                                    <select
-                                        value={selectedSemester}
-                                        onChange={(e) => setSelectedSemester(e.target.value)}
-                                        className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-purple-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
-                                    >
-                                        <option value="">All Semesters</option>
-                                        {(() => {
-                                            const effectiveDeptType = selectedDepartmentId
-                                                ? getDeptType(departments.find(d => d.id === selectedDepartmentId))
-                                                : (user?.role === 'super_admin' ? 'regular' : (departments.length > 0 ? getDeptType(departments[0]) : 'regular'));
-                                            return getActiveSemesters(effectiveDeptType).map((sem) => {
-                                                const label = getBatchLabel(sem, effectiveDeptType);
-                                                return (
-                                                    <option key={sem} value={sem}>Sem {sem}{label ? ` (${label})` : ''}</option>
-                                                );
-                                            });
-                                        })()}
-                                    </select>
-                                    <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
-                                </div>
-                            </div>
 
                             {/* Subject Filter Toggle */}
                             {availableSubjects.length > 0 && (
@@ -1180,7 +1148,7 @@ function StudentReportContent() {
                                     onClick={() => {
                                         setStartDate('');
                                         setEndDate('');
-                                        setSelectedSemester('');
+
                                         setSelectedDepartmentId('');
                                         setSearchTerm('');
                                         setPageSelectedSubjectIds(new Set(availableSubjects.map(s => s.id)));

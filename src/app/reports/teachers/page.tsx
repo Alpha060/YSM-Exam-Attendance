@@ -8,11 +8,11 @@ import { Search, X, Users, BookOpen, TrendingUp, Filter, ChevronRight, FileDown,
 import { Input } from '@/components/ui/input';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
-import { useActiveSemesters } from '@/hooks/useActiveSemesters';
+
 import * as XLSX from 'xlsx';
 
 interface User {
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -99,7 +99,7 @@ export default function TeacherReportPage() {
         router.replace('/login');
     };
 
-    const { getBatchLabel, getActiveSemesters } = useActiveSemesters();
+
 
     // Detail popup state
     const [selectedTeacher, setSelectedTeacher] = useState<TeacherDetail | null>(null);
@@ -108,7 +108,6 @@ export default function TeacherReportPage() {
 
     // Popup filters
     const [popupDeptFilter, setPopupDeptFilter] = useState('');
-    const [popupSemesterFilter, setPopupSemesterFilter] = useState('');
     const [popupDateFrom, setPopupDateFrom] = useState('');
     const [popupDateTo, setPopupDateTo] = useState('');
 
@@ -139,12 +138,11 @@ export default function TeacherReportPage() {
         }
     }, [selectedDepartmentId, user]);
 
-    // Re-fetch teacher detail when popup filters change
     useEffect(() => {
         if (selectedTeacherId) {
-            fetchTeacherDetail(selectedTeacherId, popupDeptFilter, popupSemesterFilter, popupDateFrom, popupDateTo);
+            fetchTeacherDetail(selectedTeacherId, popupDeptFilter, undefined, popupDateFrom, popupDateTo);
         }
-    }, [popupDeptFilter, popupSemesterFilter, popupDateFrom, popupDateTo]);
+    }, [popupDeptFilter, popupDateFrom, popupDateTo]);
 
     const fetchDepartments = async (token: string) => {
         try {
@@ -213,7 +211,6 @@ export default function TeacherReportPage() {
     const openTeacherDetail = (teacherId: string) => {
         setSelectedTeacherId(teacherId);
         setPopupDeptFilter('');
-        setPopupSemesterFilter('');
         setPopupDateFrom('');
         setPopupDateTo('');
         fetchTeacherDetail(teacherId);
@@ -223,7 +220,6 @@ export default function TeacherReportPage() {
         setSelectedTeacher(null);
         setSelectedTeacherId(null);
         setPopupDeptFilter('');
-        setPopupSemesterFilter('');
         setPopupDateFrom('');
         setPopupDateTo('');
     };
@@ -549,8 +545,7 @@ export default function TeacherReportPage() {
                     <div class="teacher-email">${teacher.email}</div>
                 </div>
                 <div class="meta-values">
-                    <div class="meta-row"><strong>Department:</strong> ${popupDeptFilter ? selectedTeacher.filters.departments.find(d => d.id === popupDeptFilter)?.name : 'All Departments'}</div>
-                    <div class="meta-row"><strong>Semester:</strong> ${popupSemesterFilter ? (() => { const dept = selectedTeacher.filters.departments.find(d => d.id === popupDeptFilter); const label = getBatchLabel(parseInt(popupSemesterFilter), dept?.deptType); return `Semester ${popupSemesterFilter}${label ? ` (${label})` : ''}`; })() : 'All Semesters'}</div>
+                    <div class="meta-row"><strong>Batch:</strong> ${popupDeptFilter ? selectedTeacher.filters.departments.find(d => d.id === popupDeptFilter)?.name : 'All Batches'}</div>
                     ${subjects.length === 1 ? `<div class="meta-row"><strong>Subject:</strong> ${subjects[0].name} (${subjects[0].paperCode || subjects[0].code})</div>` : ''}
                     ${popupDateFrom || popupDateTo ? `<div class="meta-row"><strong>Period:</strong> ${popupDateFrom || 'Start'} to ${popupDateTo || 'Present'}</div>` : ''}
                     <div class="meta-row"><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
@@ -574,7 +569,7 @@ export default function TeacherReportPage() {
                 <thead>
                     <tr>
                         <th style="border-radius: 4px 0 0 0;">Subject</th>
-                        <th>Semester & Batch</th>
+                        <th>Batch</th>
                         <th>Code</th>
                         <th style="text-align: center;">No. of Lectures</th>
                         <th style="text-align: center;">Attendance</th>
@@ -583,18 +578,13 @@ export default function TeacherReportPage() {
                 </thead>
                 <tbody>
                     ${subjects.map(sub => {
-            const firstSem = parseInt(sub.semester.toString().split(',')[0]) || 1;
-            const deptInfo = selectedTeacher.filters.departments.find(d => d.name === sub.department);
-            const batchLabel = getBatchLabel(firstSem, deptInfo?.deptType);
-
             return `
                         <tr>
                             <td>
-                                <div style="font-weight: 600; font-size: 11px;">${sub.name} <span style="font-weight: 500; color: var(--text-sub);">(${sub.department})</span></div>
+                                <div style="font-weight: 600; font-size: 11px;">${sub.name}</div>
                             </td>
                             <td>
-                                <div style="font-size: 11px; font-weight: 600;">Sem ${sub.semester}</div>
-                                ${batchLabel ? `<div style="font-size: 10px; color: var(--text-sub); margin-top: 2px;">${batchLabel}</div>` : ''}
+                                <div style="font-size: 11px; font-weight: 600;">${sub.department}</div>
                             </td>
                             <td style="color: var(--text-sub); font-size: 11px;">${sub.paperCode || sub.code}</td>
                             <td style="text-align: center;">${sub.sessions}</td>
@@ -847,14 +837,14 @@ export default function TeacherReportPage() {
                             {/* Department Filter */}
                             {user?.role !== 'teacher' ? (
                                 <div className="w-full">
-                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Department</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                     <div className="relative">
                                         <select
                                             value={selectedDepartmentId}
                                             onChange={(e) => setSelectedDepartmentId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-indigo-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
-                                            <option value="">All Departments</option>
+                                            <option value="">All Batches</option>
                                             {departments.map((dept) => (
                                                 <option key={dept.id} value={dept.id}>{dept.name}</option>
                                             ))}
@@ -910,7 +900,7 @@ export default function TeacherReportPage() {
                                                     <tr>
                                                         {[
                                                             { key: 'name' as const, label: 'Teacher', align: 'text-left' },
-                                                            { key: 'department' as const, label: 'Department', align: 'text-left' },
+                                                            { key: 'department' as const, label: 'Batch', align: 'text-left' },
                                                             { key: 'totalSessions' as const, label: 'No. of Lectures', align: 'text-center' },
                                                             { key: 'averageAttendance' as const, label: 'Avg. Attendance', align: 'text-left' },
                                                         ].map(col => (
@@ -1118,50 +1108,13 @@ export default function TeacherReportPage() {
                                                         onChange={(e) => setPopupDeptFilter(e.target.value)}
                                                         className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
                                                     >
-                                                        <option value="">All Departments</option>
+                                                        <option value="">All Batches</option>
                                                         {selectedTeacher.filters.departments.map((dept) => (
                                                             <option key={dept.id} value={dept.id}>{dept.name}</option>
                                                         ))}
                                                     </select>
                                                 )}
-                                                {selectedTeacher.filters.semesters?.length > 0 && (
-                                                    <select
-                                                        value={popupSemesterFilter}
-                                                        onChange={(e) => setPopupSemesterFilter(e.target.value)}
-                                                        className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
-                                                    >
-                                                        <option value="">All Semesters</option>
-                                                        {selectedTeacher.filters.semesters
-                                                            .filter(sem => {
-                                                                if (popupDeptFilter) {
-                                                                    const selectedDept = selectedTeacher.filters.departments.find(d => d.id === popupDeptFilter);
-                                                                    const activeSemesters = getActiveSemesters(selectedDept?.deptType);
-                                                                    return activeSemesters.includes(sem);
-                                                                } else {
-                                                                    return selectedTeacher.filters.departments.some(dept => {
-                                                                        const activeSemesters = getActiveSemesters(dept.deptType);
-                                                                        return activeSemesters.includes(sem);
-                                                                    });
-                                                                }
-                                                            })
-                                                            .map((sem) => {
-                                                                let dt: string | undefined;
-                                                                if (popupDeptFilter) {
-                                                                    const selectedDept = selectedTeacher.filters.departments.find(d => d.id === popupDeptFilter);
-                                                                    dt = selectedDept?.deptType;
-                                                                } else {
-                                                                    const validDept = selectedTeacher.filters.departments.find(dept =>
-                                                                        getActiveSemesters(dept.deptType).includes(sem)
-                                                                    );
-                                                                    dt = validDept?.deptType;
-                                                                }
-                                                                const label = getBatchLabel(sem, dt);
-                                                                return (
-                                                                    <option key={sem} value={sem}>Sem {sem}{label ? ` (${label})` : ''}</option>
-                                                                );
-                                                            })}
-                                                    </select>
-                                                )}
+
                                                 <div>
                                                     <input
                                                         type="date"

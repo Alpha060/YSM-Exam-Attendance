@@ -65,23 +65,12 @@ export function MobileSidebar({ isOpen, onClose, user, onLogout }: MobileSidebar
         if (user.role === 'super_admin') {
             return [
                 ...commonLinks,
-                { id: 'departments', title: 'Departments', href: '/departments', icon: <Building2 className="w-5 h-5" /> },
+                { id: 'batches', title: 'Batches', href: '/departments', icon: <Building2 className="w-5 h-5" /> },
                 { id: 'subjects', title: 'Subjects', href: '/subjects', icon: <BookOpen className="w-5 h-5" /> },
                 { id: 'teachers', title: 'Teachers', href: '/teachers', icon: <Users className="w-5 h-5" /> },
                 { id: 'students', title: 'Students', href: '/students', icon: <GraduationCap className="w-5 h-5" /> },
                 { id: 'holidays', title: 'Holidays', href: '/holidays', icon: <CalendarDays className="w-5 h-5" /> },
                 { id: 'reports', title: 'Reports', href: '/reports', icon: <BarChart3 className="w-5 h-5" /> },
-            ];
-        } else if (user.role === 'hod') {
-            return [
-                ...commonLinks,
-                { id: 'attendance', title: 'Attendance', href: '/attendance', icon: <ClipboardCheck className="w-5 h-5" /> },
-                { id: 'classes', title: "My Classes", href: '/classes', icon: <UsersRound className="w-5 h-5" /> },
-                { id: 'teachers', title: 'My Teachers', href: '/teachers', icon: <Users className="w-5 h-5" /> },
-                { id: 'students', title: 'My Students', href: '/students', icon: <GraduationCap className="w-5 h-5" /> },
-                { id: 'subjects', title: 'My Subjects', href: '/subjects', icon: <BookOpen className="w-5 h-5" /> },
-                { id: 'reports', title: 'Department Reports', href: '/reports', icon: <BarChart3 className="w-5 h-5" /> },
-                { id: 'my-reports', title: 'My Reports', href: '/my-reports', icon: <TrendingUp className="w-5 h-5" /> },
             ];
         } else {
             return [

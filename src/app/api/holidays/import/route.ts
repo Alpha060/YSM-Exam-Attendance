@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
 
         const token = authHeader.split(' ')[1];
         const payload = verifyToken(token);
-        if (!payload || !['super_admin', 'hod'].includes(payload.role)) {
+        if (!payload || !['super_admin'].includes(payload.role)) {
             return NextResponse.json({ error: 'Access denied. You do not have permission to import holidays.' }, { status: 403 });
         }
 
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
         try {
             await client.query('BEGIN');
 
-            const departmentId = payload.role === 'hod' ? payload.departmentId : null;
+            const departmentId = payload.role === 'super_admin' ? payload.departmentId : null;
 
             if (validHolidays.length > 0) {
                 const CHUNK_SIZE = 100;

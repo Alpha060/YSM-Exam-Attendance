@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
             let queryStr = 'SELECT id, name, date, description, department_id FROM holidays';
             const params: any[] = [];
 
-            if (payload.role === 'hod' && payload.departmentId) {
+            if (payload.role === 'super_admin' && payload.departmentId) {
                 queryStr += ' WHERE department_id IS NULL OR department_id = $1';
                 params.push(payload.departmentId);
             } else if (payload.role === 'teacher') {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
         const token = authHeader.split(' ')[1];
         const payload = verifyToken(token);
-        if (!payload || !['super_admin', 'hod'].includes(payload.role)) {
+        if (!payload || !['super_admin'].includes(payload.role)) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Name and date are required' }, { status: 400 });
         }
 
-        const departmentId = payload.role === 'hod' ? payload.departmentId : null;
+        const departmentId = payload.role === 'super_admin' ? payload.departmentId : null;
 
         const holidays = await query<HolidayRow>(
             `INSERT INTO holidays (name, date, description, department_id)

@@ -65,8 +65,8 @@ export default function LoginPage() {
                 {/* Content */}
                 <div className="relative z-10 animate-slide-in-top duration-700">
                     <div className="flex items-center gap-4 text-white mb-12">
-                        <div className="bg-white/10 backdrop-blur-md border border-white/20 p-2 rounded-2xl h-16 w-16 flex items-center justify-center shadow-2xl">
-                            <img src="/college-logo.png" alt="YSM Logo" className="w-full h-full object-contain drop-shadow-md" />
+                        <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-full h-24 w-24 flex items-center justify-center overflow-hidden shadow-2xl">
+                            <img src="/college-logo.png" alt="YSM Logo" className="w-[140%] h-[140%] object-cover drop-shadow-md" />
                         </div>
                         <div className="flex flex-col">
                             <span className="text-2xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-orange-200 to-white">
@@ -123,8 +123,8 @@ export default function LoginPage() {
                         
                         {/* Mobile Header Logo */}
                         <div className="lg:hidden flex flex-col items-center gap-4 mb-8">
-                            <div className="bg-white p-3 rounded-2xl shadow-lg border border-gray-100 h-24 w-24 flex items-center justify-center relative -mt-16 sm:mt-0">
-                                <img src="/college-logo.png" alt="YSM Logo" className="w-11/12 h-11/12 object-contain" />
+                            <div className="bg-white rounded-full shadow-lg border border-gray-100 h-32 w-32 flex items-center justify-center overflow-hidden relative -mt-16 sm:mt-0">
+                                <img src="/college-logo.png" alt="YSM Logo" className="w-[140%] h-[140%] object-cover" />
                             </div>
                             <div className="text-center space-y-1">
                                 <h1 className="text-2xl font-bold text-gray-900 tracking-tight">YSM Ranchi</h1>

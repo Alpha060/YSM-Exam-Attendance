@@ -44,9 +44,9 @@ export function Navbar({ user, onMenuClick, onLogout, backUrl, backLabel }: Navb
                         >
                             <Menu className="w-6 h-6 text-gray-600" />
                         </button>
-                        <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push('/dashboard')}>
-                            <div className="bg-white p-1 rounded-full h-9 w-9 flex items-center justify-center overflow-hidden border border-blue-100 shadow-sm">
-                                <img src="/college-logo.png" alt="YSM Logo" className="w-full h-full object-contain" />
+                        <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => router.push('/dashboard')}>
+                            <div className="rounded-full h-14 w-14 flex items-center justify-center overflow-hidden shrink-0">
+                                <img src="/college-logo.png" alt="YSM Logo" className="w-[140%] h-[140%] object-cover" />
                             </div>
                             <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-orange-600 to-blue-700 hidden sm:block">
                                 YSM Ranchi

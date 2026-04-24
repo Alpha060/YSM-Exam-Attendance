@@ -17,7 +17,7 @@ interface User {
     firstName: string;
     lastName: string;
     email: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
 }
 
 interface Department {
@@ -114,7 +114,7 @@ export default function ClassSchedulePage() {
     // Fetch all data once
     useEffect(() => {
         if (!user) return;
-        if (user.role !== 'hod') {
+        if (user.role !== 'super_admin') {
             setLoading(false);
             return;
         }
@@ -246,7 +246,7 @@ export default function ClassSchedulePage() {
         onTableChange: useCallback(() => {
             // Full page re-fetch is expensive, so we just reload it
             if (!user) return;
-            if (user.role !== 'hod') return;
+            if (user.role !== 'super_admin') return;
             const token = localStorage.getItem('token');
             if (!token) return;
 
@@ -645,7 +645,7 @@ export default function ClassSchedulePage() {
         return <PageSkeleton type="classes" />;
     }
 
-    if (user.role !== 'hod') {
+    if (user.role !== 'super_admin') {
         return <AccessDenied />;
     }
 

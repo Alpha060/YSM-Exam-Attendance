@@ -112,7 +112,7 @@ export async function GET(
 
         if (filterDeptId) {
             subjectParams.push(filterDeptId);
-            subjectFilters.push(`s.degree_type IN (SELECT degree_type FROM departments WHERE id = $${subjectParams.length})`);
+            subjectFilters.push(`s.department_id = $${subjectParams.length}`);
         }
         if (filterSemester) {
             subjectParams.push(parseInt(filterSemester));
@@ -156,7 +156,7 @@ export async function GET(
                 ) as avg_attendance
              FROM teacher_subjects ts
              JOIN subjects s ON s.id = ts.subject_id
-             LEFT JOIN departments d ON d.degree_type = s.degree_type
+             LEFT JOIN departments d ON d.id = s.department_id
              LEFT JOIN attendance_records ar ON ar.subject_id = s.id AND ar.teacher_id = ts.teacher_id
              WHERE ${subjectFilters.join(' AND ')}
              GROUP BY s.code, s.name, s.paper_code
@@ -173,7 +173,7 @@ export async function GET(
 
         if (filterDeptId) {
             dailyParams.push(filterDeptId);
-            dailyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE degree_type IN (SELECT degree_type FROM departments WHERE id = $${dailyParams.length}))`);
+            dailyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE department_id = $${dailyParams.length})`);
         }
         if (filterSemester) {
             dailyParams.push(parseInt(filterSemester));
@@ -209,7 +209,7 @@ export async function GET(
 
         if (filterDeptId) {
             monthlyParams.push(filterDeptId);
-            monthlyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE degree_type IN (SELECT degree_type FROM departments WHERE id = $${monthlyParams.length}))`);
+            monthlyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE department_id = $${monthlyParams.length})`);
         }
         if (filterSemester) {
             monthlyParams.push(parseInt(filterSemester));
@@ -251,7 +251,7 @@ export async function GET(
 
         if (filterDeptId) {
             overallParams.push(filterDeptId);
-            overallFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE degree_type IN (SELECT degree_type FROM departments WHERE id = $${overallParams.length}))`);
+            overallFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE department_id = $${overallParams.length})`);
         }
         if (filterSemester) {
             overallParams.push(parseInt(filterSemester));

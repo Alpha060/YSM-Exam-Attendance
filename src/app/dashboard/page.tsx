@@ -25,7 +25,7 @@ interface User {
     email: string;
     firstName: string;
     lastName: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     departmentId: string | null;
 }
 
@@ -86,9 +86,9 @@ export default function DashboardPage() {
         if (user.role === 'super_admin') {
             return [
                 {
-                    id: 'departments',
-                    title: 'Departments',
-                    description: 'Manage departments structures & HODs',
+                    id: 'batches',
+                    title: 'Batches',
+                    description: 'Manage coaching batches',
                     href: '/departments',
                     iconComponent: <Building2 className="w-6 h-6" />,
                     gradient: 'from-amber-100 to-orange-100',
@@ -98,7 +98,7 @@ export default function DashboardPage() {
                 {
                     id: 'subjects',
                     title: 'Subjects',
-                    description: 'Configure course curriculum & syllabus',
+                    description: 'Configure batch subjects',
                     href: '/subjects',
                     iconComponent: <BookOpen className="w-6 h-6" />,
                     gradient: 'from-blue-100 to-indigo-100',
@@ -108,7 +108,7 @@ export default function DashboardPage() {
                 {
                     id: 'teachers',
                     title: 'Teachers',
-                    description: 'Manage faculty profiles & assignments',
+                    description: 'Manage teachers & assignments',
                     href: '/teachers',
                     iconComponent: <Users className="w-6 h-6" />,
                     gradient: 'from-rose-100 to-pink-100',
@@ -118,7 +118,7 @@ export default function DashboardPage() {
                 {
                     id: 'students',
                     title: 'Students',
-                    description: 'Manage student enrollments & records',
+                    description: 'Manage student registrations',
                     href: '/students',
                     iconComponent: <GraduationCap className="w-6 h-6" />,
                     gradient: 'from-emerald-100 to-teal-100',
@@ -155,89 +155,6 @@ export default function DashboardPage() {
                     textColor: 'text-slate-700',
                     borderColor: 'border-slate-300'
                 }
-            ];
-        } else if (user.role === 'hod') {
-            return [
-                {
-                    id: 'attendance',
-                    title: 'Attendance',
-                    description: 'Mark and verify daily attendance',
-                    href: '/attendance',
-                    iconComponent: <ClipboardCheck className="w-6 h-6" />,
-                    gradient: 'from-emerald-100 to-teal-100',
-                    textColor: 'text-emerald-700',
-                    borderColor: 'border-emerald-200'
-                },
-                {
-                    id: 'class-schedule',
-                    title: "Today's Classes",
-                    description: 'Assign daily class schedule to teachers',
-                    href: '/class-schedule',
-                    iconComponent: <CalendarClock className="w-6 h-6" />,
-                    gradient: 'from-teal-100 to-cyan-100',
-                    textColor: 'text-teal-700',
-                    borderColor: 'border-teal-200'
-                },
-                {
-                    id: 'teachers',
-                    title: 'My Teachers',
-                    description: 'Oversee department faculty members',
-                    href: '/teachers',
-                    iconComponent: <Users className="w-6 h-6" />,
-                    gradient: 'from-rose-100 to-pink-100',
-                    textColor: 'text-rose-700',
-                    borderColor: 'border-rose-200'
-                },
-                {
-                    id: 'students',
-                    title: 'My Students',
-                    description: 'Track department student progress',
-                    href: '/students',
-                    iconComponent: <GraduationCap className="w-6 h-6" />,
-                    gradient: 'from-blue-100 to-indigo-100',
-                    textColor: 'text-blue-700',
-                    borderColor: 'border-blue-200'
-                },
-                {
-                    id: 'subjects',
-                    title: 'My Subjects',
-                    description: 'Manage department course offerings',
-                    href: '/subjects',
-                    iconComponent: <BookOpen className="w-6 h-6" />,
-                    gradient: 'from-amber-100 to-orange-100',
-                    textColor: 'text-amber-700',
-                    borderColor: 'border-amber-200'
-                },
-                {
-                    id: 'holidays',
-                    title: 'Holidays',
-                    description: 'Manage department holidays & calendar',
-                    href: '/holidays',
-                    iconComponent: <CalendarDays className="w-6 h-6" />,
-                    gradient: 'from-cyan-100 to-sky-100',
-                    textColor: 'text-cyan-700',
-                    borderColor: 'border-cyan-200'
-                },
-                {
-                    id: 'reports',
-                    title: 'Department Reports',
-                    description: 'View detailed analytical insights',
-                    href: '/reports',
-                    iconComponent: <BarChart3 className="w-6 h-6" />,
-                    gradient: 'from-violet-100 to-purple-100',
-                    textColor: 'text-violet-700',
-                    borderColor: 'border-violet-200'
-                },
-                {
-                    id: 'my-reports',
-                    title: 'My Reports',
-                    description: 'Your personal teaching statistics',
-                    href: '/my-reports',
-                    iconComponent: <TrendingUp className="w-6 h-6" />,
-                    gradient: 'from-indigo-100 to-blue-100',
-                    textColor: 'text-indigo-700',
-                    borderColor: 'border-indigo-200'
-                },
             ];
         } else {
             return [

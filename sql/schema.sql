@@ -1,44 +1,41 @@
--- College Attendance System Database Schema (Simplified)
+-- Coaching Center Attendance System Database Schema
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 
--- Departments Table (with dept_type and degree_type)
+-- Batches Table (formerly Departments)
 CREATE TABLE IF NOT EXISTS departments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) NOT NULL UNIQUE,
     code VARCHAR(20) NOT NULL UNIQUE,
-    dept_type VARCHAR(20) NOT NULL DEFAULT 'regular' CHECK (dept_type IN ('regular', 'vocational', 'pg')),
-    degree_type VARCHAR(20) NOT NULL DEFAULT 'ba' CHECK (degree_type IN ('ba', 'bsc', 'bcom', 'bca', 'it', 'bba', 'mcom')),
     description TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Users Table (Admin, HOD, Teachers)
+-- Users Table (Admin & Teachers only)
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    role VARCHAR(20) NOT NULL CHECK (role IN ('super_admin', 'hod', 'teacher')),
+    role VARCHAR(20) NOT NULL CHECK (role IN ('super_admin', 'teacher')),
     department_id UUID REFERENCES departments(id),
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Students Table (direct link to department)
+-- Students Table (with both college Student ID and coaching Unique ID)
 CREATE TABLE IF NOT EXISTS students (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id VARCHAR(50) UNIQUE,
+    student_id VARCHAR(50) NOT NULL,
+    coaching_id VARCHAR(50) UNIQUE,
     roll_number INTEGER NOT NULL,
-    roll_number_old VARCHAR(50),
-    smart_card_id VARCHAR(50) UNIQUE,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) UNIQUE,
+    email VARCHAR(255),
     department_id UUID REFERENCES departments(id),
     current_semester INTEGER NOT NULL DEFAULT 1,
     batch_year INTEGER NOT NULL,
@@ -47,21 +44,20 @@ CREATE TABLE IF NOT EXISTS students (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Subjects Table (linked to degree_type, not department)
--- Departments are for Teachers/Students/HOD, Subjects are for Degree Programs
+-- Subjects Table (linked directly to batch/department)
 CREATE TABLE IF NOT EXISTS subjects (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     code VARCHAR(20) NOT NULL,
     paper_code VARCHAR(20),
     name VARCHAR(200) NOT NULL,
-    degree_type VARCHAR(20) NOT NULL CHECK (degree_type IN ('ba', 'bsc', 'bcom', 'bca', 'it', 'bba', 'mcom')),
+    department_id UUID REFERENCES departments(id),
     credits INTEGER NOT NULL DEFAULT 3,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(code, degree_type)
+    UNIQUE(code, department_id)
 );
 
--- Subject-Semester Mapping (One subject can be taught in multiple semesters)
+-- Subject-Semester Mapping (kept for compatibility, coaching uses semester=1)
 CREATE TABLE IF NOT EXISTS subject_semesters (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE,
@@ -69,7 +65,7 @@ CREATE TABLE IF NOT EXISTS subject_semesters (
     UNIQUE(subject_id, semester)
 );
 
--- Teacher-Subject Assignment (One teacher per subject)
+-- Teacher-Subject Assignment
 CREATE TABLE IF NOT EXISTS teacher_subjects (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     teacher_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -79,7 +75,7 @@ CREATE TABLE IF NOT EXISTS teacher_subjects (
     UNIQUE(teacher_id, subject_id, academic_year)
 );
 
--- Student-Subject Enrollment (Students manually select subjects)
+-- Student-Subject Enrollment
 CREATE TABLE IF NOT EXISTS student_subjects (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID REFERENCES students(id) ON DELETE CASCADE,
@@ -89,9 +85,7 @@ CREATE TABLE IF NOT EXISTS student_subjects (
     UNIQUE(student_id, subject_id, academic_year)
 );
 
--- Attendance Records (Per-lecture attendance)
--- Unique constraint includes teacher_id and semester to support multiple teachers
--- and same subject taught across different semesters
+-- Attendance Records
 CREATE TABLE IF NOT EXISTS attendance_records (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     subject_id UUID REFERENCES subjects(id) ON DELETE CASCADE,
@@ -129,7 +123,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- User-Department Assignments (for teachers teaching in multiple departments)
+-- User-Department Assignments (for teachers teaching in multiple batches)
 CREATE TABLE IF NOT EXISTS user_departments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -153,6 +147,7 @@ CREATE TABLE IF NOT EXISTS application_settings (
 CREATE INDEX IF NOT EXISTS idx_students_department_id ON students(department_id);
 CREATE INDEX IF NOT EXISTS idx_students_current_semester ON students(current_semester);
 CREATE INDEX IF NOT EXISTS idx_students_roll_number ON students(roll_number);
+CREATE INDEX IF NOT EXISTS idx_students_coaching_id ON students(coaching_id);
 
 -- Student-subjects table
 CREATE INDEX IF NOT EXISTS idx_student_subjects_subject_id ON student_subjects(subject_id);
@@ -169,11 +164,14 @@ CREATE INDEX IF NOT EXISTS idx_attendance_session_count ON attendance_records(da
 CREATE INDEX IF NOT EXISTS idx_teacher_subjects_teacher_id ON teacher_subjects(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_teacher_subjects_subject_id ON teacher_subjects(subject_id);
 
+-- Subjects table
+CREATE INDEX IF NOT EXISTS idx_subjects_department_id ON subjects(department_id);
+
 -- ============================================================
 -- Class Schedule Tables
 -- ============================================================
 
--- Class time slots: persists across days (HOD sets once, reused daily)
+-- Class time slots
 CREATE TABLE IF NOT EXISTS class_time_slots (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     department_id UUID REFERENCES departments(id) ON DELETE CASCADE,
@@ -185,7 +183,7 @@ CREATE TABLE IF NOT EXISTS class_time_slots (
     UNIQUE(department_id, slot_number)
 );
 
--- Daily class assignments: teacher+subject per semester+slot, resets daily
+-- Daily class assignments
 CREATE TABLE IF NOT EXISTS daily_class_assignments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     department_id UUID REFERENCES departments(id) ON DELETE CASCADE,

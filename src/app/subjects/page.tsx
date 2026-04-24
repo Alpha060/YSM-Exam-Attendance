@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,6 @@ import { MobileSidebar } from '@/components/ui/MobileSidebar';
 import { Navbar } from '@/components/ui/Navbar';
 import { AccessDenied } from '@/components/ui/access-denied';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
-import { useActiveSemesters } from '@/hooks/useActiveSemesters';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 
 interface Subject {
@@ -32,27 +31,16 @@ interface Subject {
     code: string;
     paperCode?: string;
     name: string;
-    semesters: number[];
-    degreeType: string;
+    departmentId: string | null;
+    departmentName: string | null;
+    departmentCode: string | null;
     credits: number;
-}
-
-interface GroupedSubject {
-    code: string;
-    paperCode?: string;
-    name: string;
-    degreeTypes: string[];
-    credits: number;
-    semesters: number[];
-    ids: string[];
 }
 
 interface Department {
     id: string;
     name: string;
     code: string;
-    dept_type: string;
-    degree_type: string;
 }
 
 interface User {
@@ -60,7 +48,7 @@ interface User {
     firstName: string;
     lastName: string;
     email: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     departmentId?: string;
 }
 
@@ -72,20 +60,18 @@ export default function SubjectsPage() {
     const [user, setUser] = useState<User | null>(null);
     const [showModal, setShowModal] = useState(false);
 
-    // Form data - with deptType and degreeType for degree selection
+    // Form data
     const [formData, setFormData] = useState({
-        code: '', paperCode: '', name: '', credits: '3', deptType: 'regular', degreeType: 'ba'
+        code: '', paperCode: '', name: '', credits: '3', departmentId: ''
     });
-    const [selectedSemesters, setSelectedSemesters] = useState<number[]>([1]);
-    const [selectedDegreeTypes, setSelectedDegreeTypes] = useState<string[]>(['it']); // For multi-select degree types (vocational)
-    const [editingGroup, setEditingGroup] = useState<GroupedSubject | null>(null);
+
+    const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const { getActiveSemesters, getBatchLabel } = useActiveSemesters();
 
     // Search & Filter
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterDegreeType, setFilterDegreeType] = useState('');
-    const [filterSemester, setFilterSemester] = useState('');
+    const [filterBatch, setFilterBatch] = useState('');
+
 
     // Import States
     const [showImportModal, setShowImportModal] = useState(false);
@@ -124,13 +110,13 @@ export default function SubjectsPage() {
     // Real-time updates
     useRealtimeData({
         tables: ['subjects', 'departments'],
-        onTableChange: useCallback(() => {
+        onTableChange: () => {
             const token = localStorage.getItem('token');
             if (token) {
                 fetchSubjects(token);
                 fetchDepartments(token);
             }
-        }, []),
+        },
     });
 
     const fetchSubjects = async (token: string) => {
@@ -164,141 +150,42 @@ export default function SubjectsPage() {
         }
     };
 
-    // Group subjects by code (subjects are now one-per-degree-type from API)
-    const groupedSubjects = useMemo(() => {
-        const groups: Map<string, GroupedSubject> = new Map();
-
-        subjects.forEach(subject => {
-            const key = subject.code;
-
-            if (groups.has(key)) {
-                const group = groups.get(key)!;
-                if (!group.degreeTypes.includes(subject.degreeType)) {
-                    group.degreeTypes.push(subject.degreeType);
-                }
-                // Merge semesters (union)
-                for (const sem of subject.semesters) {
-                    if (!group.semesters.includes(sem)) {
-                        group.semesters.push(sem);
-                    }
-                }
-                group.ids.push(subject.id);
-            } else {
-                groups.set(key, {
-                    code: subject.code,
-                    paperCode: subject.paperCode,
-                    name: subject.name,
-                    degreeTypes: [subject.degreeType],
-                    credits: subject.credits,
-                    semesters: [...subject.semesters],
-                    ids: [subject.id]
-                });
-            }
-        });
-
-        // Sort semesters within each group
-        groups.forEach(group => group.semesters.sort((a, b) => a - b));
-
-        return Array.from(groups.values());
-    }, [subjects]);
-
-    // Filter grouped subjects
-    const filteredGroups = useMemo(() => {
-        return groupedSubjects.filter(group => {
+    // Filter subjects
+    const filteredSubjects = useMemo(() => {
+        return subjects.filter(subject => {
             const matchesSearch =
-                group.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                group.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                (group.paperCode && group.paperCode.toLowerCase().includes(searchTerm.toLowerCase()));
-            // Check if any of the group's degree types match the filter
-            const matchesDegreeType = !filterDegreeType || group.degreeTypes.includes(filterDegreeType);
-            const matchesSem = !filterSemester || group.semesters.includes(parseInt(filterSemester));
-            return matchesSearch && matchesDegreeType && matchesSem;
+                subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                subject.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (subject.paperCode && subject.paperCode.toLowerCase().includes(searchTerm.toLowerCase()));
+            const matchesBatch = !filterBatch || subject.departmentId === filterBatch;
+            return matchesSearch && matchesBatch;
         });
-    }, [groupedSubjects, searchTerm, filterDegreeType, filterSemester]);
+    }, [subjects, searchTerm, filterBatch]);
 
-    // Determine course type from degree type
-    const getDeptTypeFromDegreeType = useCallback((dt: string) => {
-        if (['ba', 'bsc', 'bcom'].includes(dt)) return 'regular';
-        if (['it', 'bba', 'bca'].includes(dt)) return 'vocational';
-        if (dt === 'mcom') return 'pg';
-        return 'regular';
-    }, []);
-
-    const handleEdit = (group: GroupedSubject) => {
-
-        const primaryDegreeType = group.degreeTypes[0] || 'ba';
-
+    const handleEdit = (subject: Subject) => {
         setFormData({
-            code: group.code,
-            paperCode: group.paperCode || '',
-            name: group.name,
-            credits: group.credits.toString(),
-            deptType: getDeptTypeFromDegreeType(primaryDegreeType),
-            degreeType: primaryDegreeType
+            code: subject.code,
+            paperCode: subject.paperCode || '',
+            name: subject.name,
+            credits: subject.credits.toString(),
+            departmentId: subject.departmentId || ''
         });
-        setSelectedSemesters([...group.semesters]);
-        setSelectedDegreeTypes([...group.degreeTypes]);
-        setEditingGroup(group);
+
+        setEditingSubject(subject);
         setShowModal(true);
         setError('');
         setSuccess('');
     };
 
-    // Get HOD's department info for auto-detection
-    const hodDeptInfo = useMemo(() => {
-        if (user?.role !== 'hod' || !user.departmentId) return null;
-        const hodDept = departments.find(d => d.id === user.departmentId);
-        return hodDept ? { deptType: hodDept.dept_type, degreeType: hodDept.degree_type } : null;
-    }, [user, departments]);
-
-    // Get degree type label for display
-    const getDegreeTypeLabel = (dt: string) => {
-        const labels: Record<string, string> = {
-            'ba': 'BA',
-            'bsc': 'B.Sc',
-            'bcom': 'B.Com',
-            'bca': 'BCA',
-            'it': 'BSc IT',
-            'bba': 'BBA',
-            'mcom': 'M.Com'
-        };
-        return labels[dt] || dt.toUpperCase();
-    };
-
-    // Get default degree type based on course type
-    const getDefaultDegreeType = (deptType: string) => {
-        if (deptType === 'regular') return 'ba';
-        if (deptType === 'vocational') return 'bca'; // Default to bca if unspecified vocational
-        if (deptType === 'pg') return 'mcom';
-        return 'ba';
-    };
-
     const resetForm = () => {
-        const defaultDeptType = hodDeptInfo?.deptType || 'regular';
-        const defaultDegreeType = hodDeptInfo?.degreeType || getDefaultDegreeType(defaultDeptType);
-        setFormData({ code: '', paperCode: '', name: '', credits: '3', deptType: defaultDeptType, degreeType: defaultDegreeType });
-        setSelectedSemesters([1]);
-        setSelectedDegreeTypes([defaultDegreeType]);
-        setEditingGroup(null);
+        setFormData({ code: '', paperCode: '', name: '', credits: '3', departmentId: departments[0]?.id || '' });
+
+        setEditingSubject(null);
         setError('');
         setSuccess('');
     };
 
-    const toggleSemester = (sem: number) => {
-        setSelectedSemesters(prev =>
-            prev.includes(sem)
-                ? prev.filter((s: number) => s !== sem)
-                : [...prev, sem].sort((a, b) => a - b)
-        );
-    };
 
-    const toggleAllSemesters = () => {
-        if (selectedSemesters.length === 8) {
-            setSelectedSemesters([]);
-        } else {
-            setSelectedSemesters([1, 2, 3, 4, 5, 6, 7, 8]);
-        }
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -306,87 +193,39 @@ export default function SubjectsPage() {
         setSuccess('');
         const token = localStorage.getItem('token');
 
-        if (selectedSemesters.length === 0) {
-            setError('Please select at least one semester');
-            return;
-        }
 
-        // For vocational, require at least one degree type selected
-        if (formData.deptType === 'vocational' && selectedDegreeTypes.length === 0) {
-            setError('Please select at least one degree type (BCA, BSc IT, or BBA)');
+        if (!formData.departmentId) {
+            setError('Please select a batch');
             return;
         }
 
         try {
-            if (editingGroup) {
+            if (editingSubject) {
                 // UPDATE
-                // We need to handle updates for degree types:
-                // 1. Kept types (Intersection): Update Details
-                // 2. Removed types (In editingGroup but not in selected): Delete
-                // 3. Added types (In selected but not in editingGroup): Create
+                const res = await fetch('/api/subjects', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        id: editingSubject.id,
+                        code: formData.code,
+                        paperCode: formData.paperCode,
+                        name: formData.name,
+                        credits: formData.credits,
+                        departmentId: formData.departmentId
+                    }),
+                });
 
-                const originalTypes = editingGroup.degreeTypes;
-                const newTypes = formData.deptType === 'vocational' ? selectedDegreeTypes : [formData.degreeType];
-
-                const keptTypes = originalTypes.filter(dt => newTypes.includes(dt));
-                const removedTypes = originalTypes.filter(dt => !newTypes.includes(dt));
-                const addedTypes = newTypes.filter(dt => !originalTypes.includes(dt));
-
-                // 1. Update Kept Types
-                for (const dt of keptTypes) {
-                    await fetch('/api/subjects', {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`,
-                        },
-                        body: JSON.stringify({
-                            oldCode: editingGroup.code,
-                            oldDegreeType: dt,
-                            newDegreeType: dt,
-                            code: formData.code,
-                            paperCode: formData.paperCode,
-                            name: formData.name,
-                            credits: formData.credits,
-                            semesters: selectedSemesters
-                        }),
-                    });
+                const data = await res.json();
+                if (!res.ok) {
+                    setError(data.error || 'Failed to update subject');
+                    return;
                 }
-
-                // 2. Delete Removed Types
-                for (const dt of removedTypes) {
-                    await fetch(`/api/subjects?code=${encodeURIComponent(editingGroup.code)}&degreeType=${dt}`, {
-                        method: 'DELETE',
-                        headers: { Authorization: `Bearer ${token}` },
-                    });
-                }
-
-                // 3. Create Added Types
-                if (addedTypes.length > 0) {
-                    await fetch('/api/subjects', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            Authorization: `Bearer ${token}`,
-                        },
-                        body: JSON.stringify({
-                            code: formData.code,
-                            paperCode: formData.paperCode,
-                            name: formData.name,
-                            credits: formData.credits,
-                            degreeTypes: addedTypes,
-                            semesters: selectedSemesters
-                        }),
-                    });
-                }
-
                 setSuccess('Subject updated successfully!');
             } else {
-                // CREATE - with degreeTypes array for vocational, single degreeType for others
-                const degreeTypesToSend = formData.deptType === 'vocational'
-                    ? selectedDegreeTypes
-                    : [formData.degreeType];
-
+                // CREATE
                 const res = await fetch('/api/subjects', {
                     method: 'POST',
                     headers: {
@@ -398,8 +237,7 @@ export default function SubjectsPage() {
                         paperCode: formData.paperCode,
                         name: formData.name,
                         credits: formData.credits,
-                        degreeTypes: degreeTypesToSend,
-                        semesters: selectedSemesters
+                        departmentId: formData.departmentId
                     }),
                 });
 
@@ -408,7 +246,7 @@ export default function SubjectsPage() {
                     setError(data.error || 'Failed to create subject');
                     return;
                 }
-                setSuccess(`Subject created for ${data.count} semester/degree-type combination(s)!`);
+                setSuccess('Subject created successfully!');
             }
 
             fetchSubjects(token!);
@@ -422,26 +260,20 @@ export default function SubjectsPage() {
         }
     };
 
-    const handleDelete = async (group: GroupedSubject) => {
-        if (!confirm(`Are you sure you want to delete "${group.name}" from ALL associated degree types (${group.degreeTypes.join(', ')})?`)) return;
+    const handleDelete = async (subject: Subject) => {
+        if (!confirm(`Are you sure you want to delete "${subject.name}"?`)) return;
         const token = localStorage.getItem('token');
 
         try {
-            // Delete for each degree type in the group
-            let successCount = 0;
-            for (const dt of group.degreeTypes) {
-                const res = await fetch(`/api/subjects?code=${encodeURIComponent(group.code)}&degreeType=${dt}`, {
-                    method: 'DELETE',
-                    headers: { Authorization: `Bearer ${token}` },
-                });
-                if (res.ok) successCount++;
-            }
-
-            if (successCount === group.degreeTypes.length) {
+            const res = await fetch(`/api/subjects?id=${subject.id}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
                 fetchSubjects(token!);
             } else {
-                alert('Some subjects could not be deleted (possibly due to existing attendance records).');
-                fetchSubjects(token!); // Refresh anyway
+                const data = await res.json();
+                alert(data.error || 'Failed to delete subject');
             }
         } catch (err) {
             console.error('Error deleting:', err);
@@ -455,8 +287,8 @@ export default function SubjectsPage() {
             'code': 'code', 'subject code': 'code', 'subject_code': 'code', 'code*': 'code', 'subjectcode': 'code',
             'paper code': 'paper_code', 'paper_code': 'paper_code', 'papercode': 'paper_code',
             'name': 'name', 'subject name': 'name', 'subject_name': 'name', 'name*': 'name', 'subjectname': 'name', 'title': 'name',
-            'degree type': 'degree_type', 'degree_type': 'degree_type', 'degreetype': 'degree_type', 'degree_type*': 'degree_type', 'degree': 'degree_type', 'type': 'degree_type',
-            'semesters': 'semesters', 'semester': 'semesters', 'sem': 'semesters', 'semesters*': 'semesters',
+            'batch code': 'batch_code', 'batch_code': 'batch_code', 'batchcode': 'batch_code', 'department_code': 'batch_code', 'department code': 'batch_code',
+            'degree type': 'batch_code', 'degree_type': 'batch_code', 'degreetype': 'batch_code', 'degree_type*': 'batch_code',
             'credits': 'credits', 'credit': 'credits', 'cr': 'credits'
         };
 
@@ -523,14 +355,11 @@ export default function SubjectsPage() {
     };
 
     const downloadTemplate = () => {
-        const headers = ['code*', 'paper_code', 'name*', 'degree_type*', 'semesters', 'credits'];
+        const headers = ['code*', 'paper_code', 'name*', 'batch_code', 'credits'];
         const dummyData = [
-            ['ENG101', '', 'English Literature', 'ba', '1,2,3,4,5', '4'],
-            ['MATH101', 'PC-MATH-101', 'Mathematics', 'bsc', '1,2,3', '4'],
-            ['ACC101', '', 'Accountancy', 'bcom', '1,2,3,4,5,6', '3'],
-            ['PROG101', 'BCA-PROG', 'Programming in C', 'bca,it,bba', '1,2', '4'],
-            ['EVS101', '', 'Environmental Studies', 'ba,bsc,bcom', '1', '2'],
-            ['MGT101', '', 'Management Principles', 'bba', '1,2,3', '3']
+            ['ENG101', '', 'English Literature', 'LKS', '4'],
+            ['MATH101', 'PC-MATH-101', 'Mathematics', 'LKS', '4'],
+            ['SCI101', '', 'General Science', 'LKS', '3'],
         ];
 
         const csvContent = [
@@ -606,7 +435,7 @@ export default function SubjectsPage() {
         return <AccessDenied message="Teachers do not have access to the Subjects page." />;
     }
 
-    const canManage = user?.role === 'super_admin' || user?.role === 'hod';
+    const canManage = user?.role === 'super_admin' || user?.role === 'super_admin';
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -665,47 +494,22 @@ export default function SubjectsPage() {
                 {/* Search & Filter Controls */}
                 <div className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
                     <div className="flex gap-2 w-full md:w-auto">
-                        {/* Only show degree filter for Admins or HODs with multiple degree types */}
-                        {(user?.role === 'super_admin' || new Set(departments.map(d => getDeptTypeFromDegreeType(d.degree_type))).size > 1) && (
+                        {/* Batch filter */}
+                        {departments.length > 1 && (
                             <div className="relative w-full md:w-auto">
                                 <select
                                     className="w-full md:w-48 bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
-                                    value={filterDegreeType}
-                                    onChange={(e) => setFilterDegreeType(e.target.value)}
+                                    value={filterBatch}
+                                    onChange={(e) => setFilterBatch(e.target.value)}
                                 >
-                                    <option value="">All Degrees</option>
-                                    <option value="ba">BA (Bachelor of Arts)</option>
-                                    <option value="bsc">B.Sc (Bachelor of Science)</option>
-                                    <option value="bcom">B.Com (Bachelor of Commerce)</option>
-                                    <option value="bca">BCA</option>
-                                    <option value="it">BSc IT</option>
-                                    <option value="bba">BBA</option>
-                                    <option value="mcom">M.Com (Master of Commerce)</option>
+                                    <option value="">All Batches</option>
+                                    {departments.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                                    ))}
                                 </select>
                                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                             </div>
                         )}
-                        <div className="relative w-full md:w-auto">
-                            <select
-                                className="w-full md:w-40 bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
-                                value={filterSemester}
-                                onChange={(e) => setFilterSemester(e.target.value)}
-                            >
-                                <option value="">All Semesters</option>
-                                {(() => {
-                                    const effectiveDeptTypeForFilter = filterDegreeType 
-                                        ? getDeptTypeFromDegreeType(filterDegreeType)
-                                        : (user?.role === 'super_admin' ? 'regular' : (departments.length > 0 ? getDeptTypeFromDegreeType(departments[0].degree_type) : 'regular'));
-                                    return getActiveSemesters(effectiveDeptTypeForFilter).map(s => {
-                                        const label = getBatchLabel(s, effectiveDeptTypeForFilter);
-                                        return (
-                                            <option key={s} value={s}>Sem {s}{label ? ` (${label})` : ''}</option>
-                                        );
-                                    });
-                                })()}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                        </div>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
@@ -726,7 +530,7 @@ export default function SubjectsPage() {
                 {/* Desktop Content */}
                 {/* Desktop Content */}
                 <div className="hidden md:block px-4 py-8">
-                    {filteredGroups.length === 0 ? (
+                    {filteredSubjects.length === 0 ? (
                         <Card className="border-dashed border-2 border-gray-200 bg-gray-50/50 shadow-none">
                             <CardContent className="py-12 text-center">
                                 <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm border border-gray-100">
@@ -752,66 +556,48 @@ export default function SubjectsPage() {
                                         <th className="px-4 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">S.No.</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Subject Info</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Paper Code</th>
-                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Degree</th>
-                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Semesters</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Credits</th>
                                         {canManage && <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
-                                    {filteredGroups.map((group, index) => (
-                                        <tr key={group.code} className="hover:bg-gray-50/80 transition-colors">
+                                    {filteredSubjects.map((subj, index) => (
+                                        <tr key={subj.id} className="hover:bg-gray-50/80 transition-colors">
                                             <td className="px-4 py-4 text-center text-sm font-medium text-gray-500">{index + 1}</td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
                                                     <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm shadow-indigo-200">
-                                                        {group.code.substring(0, 2)}
+                                                        {subj.code.substring(0, 2)}
                                                     </div>
                                                     <div>
-                                                        <div className="font-semibold text-gray-900">{group.name}</div>
-                                                        <div className="text-xs text-gray-500 font-mono mt-0.5">{group.code}</div>
+                                                        <div className="font-semibold text-gray-900">{subj.name}</div>
+                                                        <div className="text-xs text-gray-500 font-mono mt-0.5">{subj.code}</div>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-600 font-mono">
-                                                {group.paperCode || '-'}
+                                                {subj.paperCode || '-'}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {group.degreeTypes.map(dt => (
-                                                        <span key={dt} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
-                                                            {getDegreeTypeLabel(dt)}
-                                                        </span>
-                                                    ))}
-                                                </div>
+                                                {subj.departmentName ? (
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                                                        {subj.departmentName}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 text-sm">-</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="flex flex-wrap gap-1">
-                                                    {group.semesters.map(sem => (
-                                                        <span key={sem} className="w-6 h-6 rounded-full bg-gray-50 text-gray-600 border border-gray-100 flex items-center justify-center text-[10px] font-bold">
-                                                            {sem}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm font-medium text-gray-700">{group.credits} <span className="text-gray-400 font-normal text-xs ml-0.5">Cr</span></div>
+                                                <div className="text-sm font-medium text-gray-700">{subj.credits} <span className="text-gray-400 font-normal text-xs ml-0.5">Cr</span></div>
                                             </td>
                                             {canManage && (
                                                 <td className="px-6 py-4 text-right">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        <button
-                                                            onClick={() => handleEdit(group)}
-                                                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                            title="Edit"
-                                                        >
+                                                        <button onClick={() => handleEdit(subj)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
                                                             <Pencil className="w-4 h-4" />
                                                         </button>
-                                                        <button
-                                                            onClick={() => handleDelete(group)}
-                                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                            title="Delete"
-                                                        >
+                                                        <button onClick={() => handleDelete(subj)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
                                                             <Trash2 className="w-4 h-4" />
                                                         </button>
                                                     </div>
@@ -826,10 +612,8 @@ export default function SubjectsPage() {
                 </div>
 
 
-                {/* Mobile Content */}
-                {/* Mobile Content */}
                 <div className="md:hidden space-y-4 pt-4">
-                    {filteredGroups.length === 0 ? (
+                    {filteredSubjects.length === 0 ? (
                         <div className="bg-white rounded-2xl p-8 text-center text-gray-500 shadow-sm border border-gray-100">
                             <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
                                 <BookOpen className="w-6 h-6 text-gray-400" />
@@ -838,71 +622,55 @@ export default function SubjectsPage() {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {filteredGroups.map((group) => (
+                            {filteredSubjects.map((subj) => (
                                 <div
-                                    key={group.code}
+                                    key={subj.id}
                                     className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 relative"
                                 >
                                     <div className="flex justify-between items-start mb-3">
                                         <div className="flex items-center gap-3">
                                             <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm shadow-blue-200">
-                                                {group.code.substring(0, 2)}
+                                                {subj.code.substring(0, 2)}
                                             </div>
                                             <div>
-                                                <h3 className="font-bold text-gray-900 leading-tight">{group.name}</h3>
+                                                <h3 className="font-bold text-gray-900 leading-tight">{subj.name}</h3>
                                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                     <span className="text-xs font-mono text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded">
-                                                        {group.code}
+                                                        {subj.code}
                                                     </span>
-                                                    {group.paperCode && (
+                                                    {subj.paperCode && (
                                                         <>
                                                             <span className="text-xs text-gray-400">•</span>
                                                             <span className="text-xs font-mono text-gray-500 bg-gray-50 px-1.5 py-0.5 rounded" title="Paper Code">
-                                                                {group.paperCode}
+                                                                {subj.paperCode}
                                                             </span>
                                                         </>
                                                     )}
                                                     <span className="text-xs text-gray-400">•</span>
-                                                    <span className="text-xs text-gray-500 whitespace-nowrap">{group.credits} Credits</span>
+                                                    <span className="text-xs text-gray-500 whitespace-nowrap">{subj.credits} Credits</span>
                                                 </div>
                                             </div>
                                         </div>
                                         {canManage && (
                                             <div className="flex gap-1 -mr-2 -mt-2">
-                                                <button
-                                                    onClick={() => handleEdit(group)}
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                >
+                                                <button onClick={() => handleEdit(subj)} className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                                                     <Pencil className="w-4 h-4" />
                                                 </button>
-                                                <button
-                                                    onClick={() => handleDelete(group)}
-                                                    className="p-2 text-red-500 md:text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                >
+                                                <button onClick={() => handleDelete(subj)} className="p-2 text-red-500 md:text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </div>
                                         )}
                                     </div>
 
-                                    <div className="flex flex-wrap gap-2 mt-3">
-                                        {group.degreeTypes.map(dt => (
-                                            <span key={dt} className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
-                                                {getDegreeTypeLabel(dt)}
+                                    {subj.departmentName && (
+                                        <div className="flex flex-wrap gap-2 mt-3">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                                                {subj.departmentName}
                                             </span>
-                                        ))}
-                                    </div>
-
-                                    <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-2 overflow-x-auto pb-1">
-                                        <span className="text-xs text-gray-400 whitespace-nowrap">Semesters:</span>
-                                        <div className="flex gap-1">
-                                            {group.semesters.map(sem => (
-                                                <span key={sem} className="w-5 h-5 rounded-full bg-gray-50 text-gray-600 border border-gray-100 flex items-center justify-center text-[10px] font-bold">
-                                                    {sem}
-                                                </span>
-                                            ))}
                                         </div>
-                                    </div>
+                                    )}
+
                                 </div>
                             ))}
                         </div>
@@ -936,7 +704,7 @@ export default function SubjectsPage() {
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
                         <CardHeader>
-                            <CardTitle>{editingGroup ? 'Edit Subject' : 'Add Subject'}</CardTitle>
+                            <CardTitle>{editingSubject ? 'Edit Subject' : 'Add Subject'}</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <form onSubmit={handleSubmit} className="space-y-4">
@@ -980,159 +748,24 @@ export default function SubjectsPage() {
                                         required
                                     />
                                 </div>
-                                {/* Multi-Semester Selection */}
+
+                                {/* Batch Selection */}
                                 <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <Label>Semesters *</Label>
-                                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedSemesters.length === 8}
-                                                onChange={toggleAllSemesters}
-                                                className="w-4 h-4"
-                                            />
-                                            Select All
-                                        </label>
-                                    </div>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
-                                            <label
-                                                key={sem}
-                                                className={`flex items-center justify-center gap-2 p-2 border rounded cursor-pointer transition-colors ${selectedSemesters.includes(sem)
-                                                    ? 'bg-cyan-100 border-cyan-500 text-cyan-800'
-                                                    : 'bg-white hover:bg-gray-50'
-                                                    }`}
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedSemesters.includes(sem)}
-                                                    onChange={() => toggleSemester(sem)}
-                                                    className="sr-only"
-                                                />
-                                                <span className="text-sm font-medium">Sem {sem}</span>
-                                            </label>
+                                    <Label htmlFor="departmentId">Batch *</Label>
+                                    <select
+                                        id="departmentId"
+                                        className="w-full p-2 border rounded bg-gradient-to-r from-cyan-50 to-white"
+                                        value={formData.departmentId}
+                                        onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                                        required
+                                    >
+                                        <option value="">Select Batch</option>
+                                        {departments.map(d => (
+                                            <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
                                         ))}
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Selected: {selectedSemesters.length} semester(s)
-                                    </p>
+                                    </select>
                                 </div>
 
-                                {/* Course Type Selection - Only for Super Admin */}
-                                {user?.role === 'super_admin' && (
-                                    <div>
-                                        <Label htmlFor="deptType">Course Type *</Label>
-                                        <select
-                                            id="deptType"
-                                            className="w-full p-2 border rounded bg-gradient-to-r from-cyan-50 to-white"
-                                            value={formData.deptType}
-                                            onChange={(e) => {
-                                                const newDeptType = e.target.value;
-                                                const newDegreeType = newDeptType === 'regular' ? 'ba' :
-                                                    newDeptType === 'vocational' ? 'it' : 'mcom';
-                                                setFormData({
-                                                    ...formData,
-                                                    deptType: newDeptType,
-                                                    degreeType: newDegreeType
-                                                });
-                                                // Reset selectedDegreeTypes based on course type
-                                                if (newDeptType === 'vocational') {
-                                                    setSelectedDegreeTypes(['bca']); // Default to BCA selected
-                                                } else {
-                                                    setSelectedDegreeTypes([newDegreeType]);
-                                                }
-                                            }}
-                                        >
-                                            <option value="regular">Regular (BA/BSc/BCom)</option>
-                                            <option value="vocational">Vocational (BCA, BSc IT, BBA)</option>
-                                            <option value="pg">Postgraduate (MCom)</option>
-                                        </select>
-                                    </div>
-                                )}
-
-                                {/* Degree Type Selection - Only for Super Admin */}
-                                {user?.role === 'super_admin' && (
-                                    <div>
-                                        <Label htmlFor="degreeType">Degree Type *</Label>
-
-                                        {/* For Vocational - Multi-select checkboxes */}
-                                        {formData.deptType === 'vocational' ? (
-                                            <>
-                                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                                    {[
-                                                        { value: 'bca', label: 'BCA' },
-                                                        { value: 'it', label: 'BSc IT' },
-                                                        { value: 'bba', label: 'BBA' }
-                                                    ].map(opt => (
-                                                        <label
-                                                            key={opt.value}
-                                                            className={`flex items-center justify-center gap-2 p-2 border rounded cursor-pointer transition-colors ${selectedDegreeTypes.includes(opt.value)
-                                                                ? 'bg-purple-100 border-purple-500 text-purple-800'
-                                                                : 'bg-white hover:bg-gray-50'
-                                                                }`}
-                                                        >
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={selectedDegreeTypes.includes(opt.value)}
-                                                                onChange={() => {
-                                                                    setSelectedDegreeTypes(prev =>
-                                                                        prev.includes(opt.value)
-                                                                            ? prev.filter(dt => dt !== opt.value)
-                                                                            : [...prev, opt.value]
-                                                                    );
-                                                                }}
-                                                                className="sr-only"
-                                                            />
-                                                            <span className="text-sm font-medium">{opt.label}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    Selected: {selectedDegreeTypes.length === 0 ? 'None' : selectedDegreeTypes.map(dt => dt === 'bca' ? 'BCA' : dt === 'it' ? 'BSc IT' : 'BBA').join(', ')}
-                                                </p>
-                                            </>
-                                        ) : (
-                                            /* For Regular/PG - Single select dropdown */
-                                            <>
-                                                <select
-                                                    id="degreeType"
-                                                    className="w-full p-2 border rounded"
-                                                    value={formData.degreeType}
-                                                    onChange={(e) => {
-                                                        setFormData({
-                                                            ...formData,
-                                                            degreeType: e.target.value
-                                                        });
-                                                    }}
-                                                >
-                                                    {formData.deptType === 'regular' && (
-                                                        <>
-                                                            <option value="ba">BA (Bachelor of Arts)</option>
-                                                            <option value="bsc">B.Sc (Bachelor of Science)</option>
-                                                            <option value="bcom">B.Com (Bachelor of Commerce)</option>
-                                                        </>
-                                                    )}
-                                                    {formData.deptType === 'pg' && (
-                                                        <option value="mcom">M.Com (Master of Commerce)</option>
-                                                    )}
-                                                </select>
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    Subject will be assigned to: {getDegreeTypeLabel(formData.degreeType)}
-                                                </p>
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-
-                                {/* For HOD, show their degree type (read-only) */}
-                                {user?.role === 'hod' && hodDeptInfo && (
-                                    <div>
-                                        <Label>Degree Type</Label>
-                                        <p className="text-sm text-gray-700 bg-gray-50 p-2 rounded border">
-                                            {getDegreeTypeLabel(hodDeptInfo.degreeType)}
-                                        </p>
-                                    </div>
-                                )}
 
                                 {error && <p className="text-red-500 text-sm">{error}</p>}
                                 {success && <p className="text-green-600 text-sm bg-green-50 p-2 rounded">{success}</p>}
@@ -1140,7 +773,7 @@ export default function SubjectsPage() {
                                     <Button type="button" variant="outline" onClick={() => { setShowModal(false); resetForm(); }}>
                                         Cancel
                                     </Button>
-                                    <Button type="submit">{editingGroup ? 'Update' : 'Save'} Subject</Button>
+                                    <Button type="submit">{editingSubject ? 'Update' : 'Save'} Subject</Button>
                                 </div>
                             </form>
                         </CardContent>
@@ -1165,8 +798,8 @@ export default function SubjectsPage() {
                                 <div className="mt-0.5"><FileSpreadsheet className="w-5 h-5" /></div>
                                 <div>
                                     <p className="font-semibold">Bulk Import Instructions</p>
-                                    <p className="mt-1 opacity-90">Upload a CSV or Excel file with subject details. Required columns: <code>code</code>, <code>name</code>, <code>degree_type</code>. Optional: <code>semesters</code> (comma-separated, default 1), <code>credits</code> (default 3).</p>
-                                    <p className="mt-1 opacity-75 text-xs">Valid degree types: ba, bsc, bcom, it, bba, mcom. For multiple types, use comma-separated values (e.g. &quot;it,bba&quot;).</p>
+                                    <p className="mt-1 opacity-90">Upload a CSV or Excel file with subject details. Required columns: <code>code</code>, <code>name</code>. Optional: <code>batch_code</code> (e.g. LKS), <code>credits</code> (default 3).</p>
+                                    <p className="mt-1 opacity-75 text-xs">Use the batch code from your batches list. Download the template for reference.</p>
                                 </div>
                             </div>
 

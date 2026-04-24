@@ -23,11 +23,11 @@ export async function POST(req: Request) {
         };
 
         // Cache departments for validation
-        const deptResult = await client.query('SELECT id, code, degree_type FROM departments');
-        const departmentMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id, degreeType: d.degree_type }]));
+        const deptResult = await client.query('SELECT id, code FROM departments');
+        const departmentMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id }]));
 
-        // Cache ALL subjects for assignment
-        const subjectResult = await client.query('SELECT id, code, name, degree_type FROM subjects');
+        // Cache ALL subjects for assignment (including department for batch filtering)
+        const subjectResult = await client.query('SELECT id, code, name, department_id FROM subjects');
         const allSubjects = subjectResult.rows;
 
         // Batch: Pre-fetch all existing emails in one query
@@ -77,8 +77,8 @@ export async function POST(req: Request) {
                 }
 
                 // 1. Validate Required Fields
-                if (!teacher.email || !teacher.first_name || !teacher.department_code || !teacher.role) {
-                    throw new Error('Missing required fields (email, name, role, department_code)');
+                if (!teacher.email || !teacher.first_name || !(teacher.department_code || teacher.batch_code) || !teacher.role) {
+                    throw new Error('Missing required fields (email, name, role, batch_code)');
                 }
 
                 // Email validation
@@ -93,45 +93,47 @@ export async function POST(req: Request) {
                     throw new Error(`Email already exists: ${email}`);
                 }
 
-                // Department validation (now supports comma-separated)
-                const deptCodes = teacher.department_code.split(',').map((c: string) => c.trim().toUpperCase()).filter(Boolean);
+                // Department validation (now supports comma-separated, also accepts batch_code)
+                const rawDeptCode = teacher.department_code || teacher.batch_code;
+                if (!rawDeptCode) {
+                    throw new Error('Missing required field: batch_code');
+                }
+                const deptCodes = rawDeptCode.split(',').map((c: string) => c.trim().toUpperCase()).filter(Boolean);
                 if (deptCodes.length === 0) {
                     throw new Error('No department codes provided');
                 }
 
                 const assignedDeptIds: string[] = [];
-                const assignedDegreeTypes: string[] = [];
                 
                 for (const code of deptCodes) {
                     const deptInfo = departmentMap.get(code);
                     if (!deptInfo) {
-                        throw new Error(`Invalid Department Code: ${code}`);
+                        throw new Error(`Invalid Batch Code: ${code}`);
                     }
                     assignedDeptIds.push(deptInfo.id);
-                    assignedDegreeTypes.push(deptInfo.degreeType);
                 }
                 
                 const primaryDeptId = assignedDeptIds[0];
 
                 // Role validation
                 const role = teacher.role.toLowerCase();
-                if (role !== 'teacher' && role !== 'hod') {
-                    throw new Error(`Invalid Role: ${teacher.role} (must be 'teacher' or 'hod')`);
+                if (role !== 'teacher') {
+                    throw new Error(`Invalid Role: ${teacher.role} (must be 'teacher')`);
                 }
 
-                // 2. Resolve target subject IDs in memory spanning all authorized degree types
+                // 2. Resolve target subject IDs by code or name match, filtered by assigned batches
                 const resolvedSubjectIds: string[] = [];
                 if (teacher.subject_codes) {
+                    // Only match subjects within the teacher's assigned batches
+                    const batchSubjects = allSubjects.filter((s: any) => assignedDeptIds.includes(s.department_id));
                     const subjectInputs = teacher.subject_codes.split(',').map((s: string) => s.trim()).filter(Boolean);
                     for (const input of subjectInputs) {
                         const inputUpper = input.toUpperCase();
-                        const matchedSubjects = allSubjects.filter((s: any) =>
-                            assignedDegreeTypes.includes(s.degree_type) && (
-                                s.code.toUpperCase() === inputUpper ||
-                                s.name.toUpperCase() === inputUpper ||
-                                s.name.toUpperCase().includes(inputUpper) ||
-                                inputUpper.includes(s.name.toUpperCase())
-                            )
+                        const matchedSubjects = batchSubjects.filter((s: any) =>
+                            s.code.toUpperCase() === inputUpper ||
+                            s.name.toUpperCase() === inputUpper ||
+                            s.name.toUpperCase().includes(inputUpper) ||
+                            inputUpper.includes(s.name.toUpperCase())
                         );
                         for (const matchedSubject of matchedSubjects) {
                             resolvedSubjectIds.push(matchedSubject.id);

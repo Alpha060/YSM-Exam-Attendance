@@ -6,11 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Users, Calendar, TrendingUp, BookOpen, Clock, CalendarDays, FileDown } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
-import { useActiveSemesters } from '@/hooks/useActiveSemesters';
+
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -70,13 +70,11 @@ export default function MyPerformancePage() {
     const [data, setData] = useState<PerformanceData | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
-    // Filters
     const [deptFilter, setDeptFilter] = useState('');
-    const [semesterFilter, setSemesterFilter] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
 
-    const { getBatchLabel, getActiveSemesters } = useActiveSemesters();
+
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -94,7 +92,7 @@ export default function MyPerformancePage() {
         if (token && user) {
             fetchMyPerformance(token, user.id);
         }
-    }, [user, deptFilter, semesterFilter, dateFrom, dateTo]);
+    }, [user, deptFilter, dateFrom, dateTo]);
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -108,7 +106,6 @@ export default function MyPerformancePage() {
             let url = `/api/reports/teachers/${userId}`;
             const params = new URLSearchParams();
             if (deptFilter) params.append('departmentId', deptFilter);
-            if (semesterFilter) params.append('semester', semesterFilter);
             if (dateFrom) params.append('dateFrom', dateFrom);
             if (dateTo) params.append('dateTo', dateTo);
             if (params.toString()) url += '?' + params.toString();
@@ -459,8 +456,7 @@ export default function MyPerformancePage() {
                     <div class="teacher-email">${teacher.email}</div>
                 </div>
                 <div class="meta-values">
-                    <div class="meta-row"><strong>Department:</strong> ${deptFilter ? data.filters.departments.find(d => d.id === deptFilter)?.name : 'All Departments'}</div>
-                    <div class="meta-row"><strong>Semester:</strong> ${semesterFilter ? (() => { const dept = data.filters.departments.find(d => d.id === deptFilter); const label = getBatchLabel(parseInt(semesterFilter), dept?.deptType); return `Semester ${semesterFilter}${label ? ` (${label})` : ''}`; })() : 'All Semesters'}</div>
+                    <div class="meta-row"><strong>Batch:</strong> ${deptFilter ? data.filters.departments.find(d => d.id === deptFilter)?.name : 'All Batches'}</div>
                     ${subjects.length === 1 ? `<div class="meta-row"><strong>Subject:</strong> ${subjects[0].name} (${subjects[0].paperCode || subjects[0].code})</div>` : ''}
                     ${dateFrom || dateTo ? `<div class="meta-row"><strong>Period:</strong> ${dateFrom || 'Start'} to ${dateTo || 'Present'}</div>` : ''}
                     <div class="meta-row"><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
@@ -645,53 +641,14 @@ export default function MyPerformancePage() {
                                             onChange={(e) => setDeptFilter(e.target.value)}
                                             className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                                         >
-                                            <option value="">All My Departments</option>
+                                            <option value="">All My Batches</option>
                                             {data.filters.departments.map((dept) => (
                                                 <option key={dept.id} value={dept.id}>{dept.name}</option>
                                             ))}
                                         </select>
                                     </div>
                                 )}
-                                {data.filters.semesters?.length > 0 && (
-                                    <div className="flex flex-col gap-1">
-                                        <select
-                                            value={semesterFilter}
-                                            onChange={(e) => setSemesterFilter(e.target.value)}
-                                            className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-                                        >
-                                            <option value="">All Semesters</option>
-                                            {data.filters.semesters
-                                                .filter(sem => {
-                                                    if (deptFilter) {
-                                                        const selectedDept = data.filters.departments.find(d => d.id === deptFilter);
-                                                        const activeSemesters = getActiveSemesters(selectedDept?.deptType);
-                                                        return activeSemesters.includes(sem);
-                                                    } else {
-                                                        return data.filters.departments.some(dept => {
-                                                            const activeSemesters = getActiveSemesters(dept.deptType);
-                                                            return activeSemesters.includes(sem);
-                                                        });
-                                                    }
-                                                })
-                                                .map((sem) => {
-                                                    let dt: string | undefined;
-                                                    if (deptFilter) {
-                                                        const selectedDept = data.filters.departments.find(d => d.id === deptFilter);
-                                                        dt = selectedDept?.deptType;
-                                                    } else {
-                                                        const validDept = data.filters.departments.find(dept =>
-                                                            getActiveSemesters(dept.deptType).includes(sem)
-                                                        );
-                                                        dt = validDept?.deptType;
-                                                    }
-                                                    const label = getBatchLabel(sem, dt);
-                                                    return (
-                                                        <option key={sem} value={sem}>Semester {sem}{label ? ` (${label})` : ''}</option>
-                                                    );
-                                                })}
-                                        </select>
-                                    </div>
-                                )}
+
                                 <div className="flex flex-col gap-1">
                                     <input
                                         type="date"

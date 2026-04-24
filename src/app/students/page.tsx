@@ -27,14 +27,14 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { Navbar } from '@/components/ui/Navbar';
 import { AccessDenied } from '@/components/ui/access-denied';
-import { parseStudentId, findDepartmentByCode, type ParsedStudentId } from '@/lib/parseStudentId';
+import { parseCoachingId, type ParsedCoachingId } from '@/lib/parseStudentId';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
-import { useActiveSemesters } from '@/hooks/useActiveSemesters';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 
 interface Student {
     id: string;
     student_id: string | null;
+    coaching_id: string | null;
     roll_number: string;
     first_name: string;
     last_name: string;
@@ -49,24 +49,20 @@ interface Department {
     id: string;
     name: string;
     code: string;
-    dept_type: 'regular' | 'vocational' | 'pg';
-    deptType?: string;
-    degree_type: string;
 }
 
 interface Subject {
     id: string;
     code: string;
     name: string;
-    degreeType: string;
-    semesters: number[];
+    departmentId: string;
 }
 
 interface User {
     firstName: string;
     lastName: string;
     email: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     departmentId?: string;
 }
 
@@ -79,10 +75,8 @@ export default function StudentsPage() {
     const [user, setUser] = useState<User | null>(null);
     const [showModal, setShowModal] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [batchConfig, setBatchConfig] = useState<Record<string, Record<string, number>>>({});
-    const { getActiveSemesters, getBatchLabel } = useActiveSemesters();
-
-    const getDeptType = (dept?: Department) => dept?.deptType || dept?.dept_type;
+    // Coaching ID form field
+    const [coachingId, setCoachingId] = useState('');
 
     // Form States
     const [formData, setFormData] = useState({
@@ -90,21 +84,14 @@ export default function StudentsPage() {
         rollNumber: '',
         name: '',
         email: '',
-        semester: '1',
         departmentId: ''
     });
-    const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-    const [parsedInfo, setParsedInfo] = useState<ParsedStudentId | null>(null);
-
-    // Number of visible subject dropdowns (dynamic "Add Subject" feature)
-    const [subjectFieldCount, setSubjectFieldCount] = useState(1);
+    const [parsedInfo, setParsedInfo] = useState<ParsedCoachingId | null>(null);
 
     // Filter States
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterDeptType, setFilterDeptType] = useState('');
     const [filterDepartmentId, setFilterDepartmentId] = useState('');
-    const [filterSemester, setFilterSemester] = useState('');
 
 
     // Import States
@@ -116,9 +103,6 @@ export default function StudentsPage() {
 
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
-
-    // Default academic year
-    const [academicYear] = useState('2025-2026');
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -151,7 +135,6 @@ export default function StudentsPage() {
         fetchStudents(token);
         fetchDepartments(token);
         fetchSubjects(token);
-        fetchBatchConfig(token);
     }, [router]);
 
     // Real-time updates: silently re-fetch when DB tables change
@@ -229,35 +212,7 @@ export default function StudentsPage() {
         }
     };
 
-    // Fetch saved batch config from settings
-    const fetchBatchConfig = async (token: string) => {
-        try {
-            const res = await fetch('/api/settings/batch-config', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setBatchConfig(data.mappings || {});
-            }
-        } catch (err) {
-            console.error('Error fetching batch config:', err);
-        }
-    };
 
-    // Look up semester from saved batch config: given an admission year and dept type,
-    // find which semester has that admission year assigned
-    const getSemesterFromBatchConfig = (admissionYear: number, deptType: string): number | null => {
-        const mappings = batchConfig[deptType];
-        if (!mappings) return null;
-        
-        // Find the semester where the batch_year matches the admission year
-        for (const [semStr, batchYear] of Object.entries(mappings)) {
-            if (batchYear === admissionYear) {
-                return parseInt(semStr);
-            }
-        }
-        return null;
-    };
 
     const handleLogout = () => {
         localStorage.removeItem('token');
@@ -266,109 +221,61 @@ export default function StudentsPage() {
     };
 
     const handleEdit = async (student: Student) => {
+        setCoachingId(student.coaching_id || '');
         setFormData({
             studentId: student.student_id || '',
             rollNumber: student.roll_number,
             name: [student.first_name, student.last_name].filter(Boolean).join(' ').trim(),
             email: student.email || '',
-            semester: student.current_semester.toString(),
             departmentId: student.department_id
         });
         setSelectedStudentId(student.id);
-
-        // Fetch existing subject enrollments
-        try {
-            const token = localStorage.getItem('token');
-            const res = await fetch(`/api/student-subjects?studentId=${student.id}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                if (data.enrollments && data.enrollments.length > 0) {
-                    const enrolledIds = data.enrollments.map((s: any) => s.subjectId);
-                    setSelectedSubjects(enrolledIds);
-                    setSubjectFieldCount(enrolledIds.length);
-                } else {
-                    setSelectedSubjects([]);
-                    setSubjectFieldCount(1);
-                }
-            }
-        } catch (err) {
-            console.error('Error fetching student subjects', err);
-        }
-
         setShowModal(true);
         setError('');
         setSuccess('');
     };
 
     const resetForm = () => {
-        const defaultDeptId = user?.role === 'hod' ? (user.departmentId || '') : '';
         setFormData({
             studentId: '',
             rollNumber: '',
             name: '',
             email: '',
-            semester: '1',
-            departmentId: defaultDeptId
+            departmentId: ''
         });
+        setCoachingId('');
         setSelectedStudentId(null);
-        setSelectedSubjects([]);
-        setSubjectFieldCount(1);
         setParsedInfo(null);
         setError('');
         setSuccess('');
     };
 
-    // Handle Student ID input with auto-detection
-    const handleStudentIdChange = (studentId: string) => {
-        setFormData(prev => ({ ...prev, studentId }));
+    // Handle Coaching ID input with auto-detection
+    const handleCoachingIdChange = (value: string) => {
+        const id = value.toLowerCase();
+        setCoachingId(id);
 
-        // Don't parse if ID is too short
-        if (studentId.length < 10) {
+        if (id.length < 7) {
             setParsedInfo(null);
             return;
         }
 
-        const parsed = parseStudentId(studentId);
+        const parsed = parseCoachingId(id);
         setParsedInfo(parsed);
 
         if (parsed.isValid) {
-            // Auto-fill roll number
+            // Auto-fill roll number from coaching ID
             if (parsed.rollNumber) {
                 setFormData(prev => ({ ...prev, rollNumber: parsed.rollNumber!.toString() }));
             }
 
-            // Auto-fill department first (needed to look up batch config)
-            let newDeptId = formData.departmentId;
-            let detectedDeptType = 'regular';
-            if (user?.role === 'super_admin' && parsed.courseType) {
-                const foundDept = findDepartmentByCode(departments, parsed);
-                if (foundDept) {
-                    newDeptId = foundDept.id;
-                    setFormData(prev => ({ ...prev, departmentId: foundDept.id }));
-                    const dept = departments.find(d => d.id === foundDept.id);
-                    if (dept) detectedDeptType = dept.dept_type;
+            // Auto-fill batch from coaching ID prefix
+            if (parsed.batchPrefix) {
+                const matchedDept = departments.find(d => d.code.toLowerCase() === parsed.batchPrefix);
+                if (matchedDept) {
+                    setFormData(prev => ({ ...prev, departmentId: matchedDept.id }));
                 }
-            } else if (formData.departmentId) {
-                const dept = departments.find(d => d.id === formData.departmentId);
-                if (dept) detectedDeptType = dept.dept_type;
             }
-
-            // Auto-fill semester: use saved batch config first, fall back to parseStudentId calculation
-            let newSemester = formData.semester;
-            if (parsed.admissionYear) {
-                const configSemester = getSemesterFromBatchConfig(parsed.admissionYear, detectedDeptType);
-                if (configSemester) {
-                    newSemester = configSemester.toString();
-                } else if (parsed.semester) {
-                    newSemester = parsed.semester.toString();
-                }
-                setFormData(prev => ({ ...prev, semester: newSemester }));
-            }
-
-            // Auto-select subjects based on parsed info
-            // autoSelectSubjects(parsed, parseInt(newSemester), newDeptId);
         }
     };
 
@@ -492,18 +399,8 @@ export default function StudentsPage() {
         setSuccess('');
         const token = localStorage.getItem('token');
 
-        // HOD validation: prevent adding students from other departments
-        if (user?.role === 'hod' && parsedInfo?.isValid && !selectedStudentId) {
-            const foundDept = findDepartmentByCode(departments, parsedInfo);
-            if (foundDept && foundDept.id !== user.departmentId) {
-                const hodDept = departments.find(d => d.id === user.departmentId);
-                setError(`This student belongs to ${foundDept.name}. You can only add students to ${hodDept?.name || 'your department'}.`);
-                return;
-            }
-        }
-
-        if (selectedSubjects.length === 0) {
-            setError('Please select at least one subject');
+        if (!formData.departmentId) {
+            setError('Please select a batch');
             return;
         }
 
@@ -524,7 +421,7 @@ export default function StudentsPage() {
                             const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
                             return { ...formData, firstName, lastName };
                         })(),
-                        currentSemester: parseInt(formData.semester)
+                        coachingId: coachingId || undefined,
                     }),
                 });
 
@@ -533,32 +430,7 @@ export default function StudentsPage() {
                     setError(data.error || 'Failed to update student');
                     return;
                 }
-                setSuccess('Student updated successfully!');
-
-                // Sync Subjects
-                if (selectedSubjects.length > 0) {
-                    try {
-                        const enrollRes = await fetch('/api/student-subjects', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({
-                                studentId: selectedStudentId,
-                                subjectIds: selectedSubjects,
-                                academicYear: academicYear,
-                                sync: true
-                            }),
-                        });
-                        if (enrollRes.ok) {
-                            setSuccess(`Student updated & Subjects synced!`);
-                        }
-                    } catch {
-                        // ignore subject sync error for now
-                    }
-                }
-
+                setSuccess('Student updated successfully! Subjects auto-synced with batch.');
             } else {
                 // CREATE New Student
                 const res = await fetch('/api/students', {
@@ -574,7 +446,7 @@ export default function StudentsPage() {
                             const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
                             return { ...formData, firstName, lastName };
                         })(),
-                        currentSemester: parseInt(formData.semester)
+                        coachingId: coachingId || undefined,
                     }),
                 });
 
@@ -583,30 +455,7 @@ export default function StudentsPage() {
                     setError(data.error || 'Failed to create student');
                     return;
                 }
-                const newStudentId = data.student.id;
-                let successMessage = 'Student created successfully!';
-
-                // Enroll in Subjects
-                if (selectedSubjects.length > 0) {
-                    try {
-                        const enrollRes = await fetch('/api/student-subjects', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                Authorization: `Bearer ${token}`,
-                            },
-                            body: JSON.stringify({
-                                studentId: newStudentId,
-                                subjectIds: selectedSubjects,
-                                academicYear: academicYear
-                            }),
-                        });
-                        if (enrollRes.ok) successMessage += ' & Subjects assigned!';
-                    } catch {
-                        // ignore
-                    }
-                }
-                setSuccess(successMessage);
+                setSuccess('Student created! All batch subjects auto-assigned.');
             }
 
             fetchStudents(token!);
@@ -643,30 +492,9 @@ export default function StudentsPage() {
         }
     };
 
-    // Filter helper - filter subjects by semester and matching degree type of selected department
-    const getFilteredSubjects = () => {
-        const semester = parseInt(formData.semester);
-        const selectedDept = departments.find(d => d.id === formData.departmentId);
-        if (!selectedDept) return [];
-
-        return subjects.filter(s =>
-            s.semesters.includes(semester) && s.degreeType === selectedDept.degree_type
-        );
-    };
-
-    // Add a new empty subject field
-    const addSubjectField = () => {
-        setSubjectFieldCount(c => c + 1);
-    };
-
-    // Remove a subject at index
-    const removeSubjectAtIndex = (index: number) => {
-        setSelectedSubjects(prev => {
-            const newArr = [...prev];
-            newArr.splice(index, 1);
-            return newArr;
-        });
-        setSubjectFieldCount(c => Math.max(c - 1, 1));
+    // Get subjects count for a batch
+    const getBatchSubjectCount = (deptId: string) => {
+        return subjects.filter(s => s.departmentId === deptId).length;
     };
 
     // Import Logic
@@ -715,41 +543,21 @@ export default function StudentsPage() {
         }
     };
 
-    // Template for Regular students (BA/BSC/BCOM)
-    const downloadRegularTemplate = () => {
-        const headers = ['student_id*', 'name*', 'email', 'subject_codes'];
+    // Template for coaching center students
+    const downloadCoachingTemplate = () => {
+        const headers = ['student_id*', 'coaching_id', 'name*', 'email', 'batch_code*'];
         const dummyData = [
-            ['BA2025HIS001', 'John Doe', 'john@example.com', '"History,Political Science,Hindi,Environmental Studies,English Communication"'],
-            ['BSC2025PHY002', 'Jane Smith', 'jane@example.com', '"Physics,Chemistry,Mathematics"'],
-            ['BCOM2025COM003', 'Bob Wilson', 'bob@example.com', '"Commerce,Economics"'],
-            ['BA2025ECO004', 'Alice Brown', 'alice@example.com', '"Economics,History,Philosophy"']
+            ['BCA2025SC001', 'lks2026001', 'John Doe', 'john@example.com', 'LKS'],
+            ['BSC2025PHY002', 'lks2026002', 'Jane Smith', 'jane@example.com', 'LKS'],
+            ['BA2025HIS003', 'arb2026001', 'Bob Wilson', 'bob@example.com', 'ARB'],
+            ['BCOM2025COM004', 'arb2026002', 'Alice Brown', 'alice@example.com', 'ARB']
         ];
         const csvContent = [headers.join(','), ...dummyData.map(row => row.join(','))].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'regular_students_template.csv';
-        a.click();
-    };
-
-    // Template for Vocational students (BCA/BSCIT/BBA)
-    const downloadVocationalTemplate = () => {
-        const headers = ['student_id*', 'name*', 'email', 'subject_codes'];
-        const dummyData = [
-            ['BCA2025SC001', 'Rahul Kumar', 'rahul@example.com', '"C1,C2,GE1A,GE1B,AECC1"'],
-            ['BSCIT2025IT002', 'Priya Sharma', 'priya@example.com', '"C1,C2,GE1A,GE1B,AECC1"'],
-            ['BBA2025BA003', 'Amit Singh', 'amit@example.com', '"C1,C2,GE1A,GE1B,AECC1"'],
-            ['BCA2024SC004', 'Neha Gupta', 'neha@example.com', '"C5,C6,C7,GE3A,GE3B,SEC1"'],
-            ['BCA2023SC005', 'Deepak Roy', 'deepak@example.com', '"C11,C12,DSE1,DSE2"'],
-            ['BCA2022SC006', 'Anita Das', 'anita@example.com', '"C13,C14,DSE3,DSE4"']
-        ];
-        const csvContent = [headers.join(','), ...dummyData.map(row => row.join(','))].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'vocational_students_template.csv';
+        a.download = 'coaching_students_template.csv';
         a.click();
     };
 
@@ -889,18 +697,18 @@ export default function StudentsPage() {
         const matchesSearch =
             (student.first_name + ' ' + student.last_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
             String(student.roll_number).includes(searchTerm) ||
-            (student.student_id?.includes(searchTerm));
+            (student.student_id?.includes(searchTerm)) ||
+            (student.coaching_id?.includes(searchTerm.toLowerCase()));
 
         const matchesDept = !filterDepartmentId || student.department_id === filterDepartmentId;
-        const matchesSem = !filterSemester || student.current_semester.toString() === filterSemester;
 
-        return matchesSearch && matchesDept && matchesSem;
+        return matchesSearch && matchesDept;
     }).sort((a, b) =>
         String(a.roll_number || '').localeCompare(String(b.roll_number || ''), undefined, { numeric: true, sensitivity: 'base' })
     );
 
     const isSuperAdmin = user?.role === 'super_admin';
-    const canManage = user?.role === 'super_admin' || user?.role === 'hod';
+    const canManage = user?.role === 'super_admin';
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -959,26 +767,7 @@ export default function StudentsPage() {
                 {/* Filter and Search Bar */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
                     {/* Filters */}
-                    <div className="md:col-span-4 flex gap-2">
-                        {/* Always show department filters for Admins and HODs */}
-                            {new Set(departments.map(d => d.dept_type)).size > 1 && (
-                                <div className="relative w-full">
-                                    <select
-                                        className="w-full bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none cursor-pointer"
-                                        value={filterDeptType}
-                                        onChange={(e) => {
-                                            setFilterDeptType(e.target.value);
-                                            setFilterDepartmentId(''); // Reset department when type changes
-                                        }}
-                                    >
-                                        <option value="">All Types</option>
-                                        <option value="regular">Regular</option>
-                                        <option value="vocational">Vocational</option>
-                                        <option value="pg">PG</option>
-                                    </select>
-                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                                </div>
-                            )}
+                <div className="md:col-span-4 flex gap-2">
                             {departments.length > 1 && (
                                 <div className="relative w-full">
                                     <select
@@ -986,33 +775,14 @@ export default function StudentsPage() {
                                         value={filterDepartmentId}
                                         onChange={(e) => setFilterDepartmentId(e.target.value)}
                                     >
-                                        <option value="">All Departments</option>
-                                        {departments
-                                            .filter(dept => !filterDeptType || dept.dept_type === filterDeptType)
-                                            .map((dept) => (
-                                                <option key={dept.id} value={dept.id}>{dept.name} ({(dept.degree_type || '').toUpperCase()})</option>
-                                            ))}
+                                        <option value="">All Batches</option>
+                                        {departments.map((dept) => (
+                                            <option key={dept.id} value={dept.id}>{dept.name} ({dept.code})</option>
+                                        ))}
                                     </select>
                                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                                 </div>
                             )}
-                        <div className="relative w-full">
-                            <select
-                                className="w-full bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none cursor-pointer"
-                                value={filterSemester}
-                                onChange={(e) => setFilterSemester(e.target.value)}
-                            >
-                                <option value="">All Semesters</option>
-                                {(() => {
-                                    const effectiveDeptType = filterDeptType || (filterDepartmentId ? getDeptType(departments.find(d => d.id === filterDepartmentId)) : (isSuperAdmin ? 'regular' : (departments.length > 0 ? getDeptType(departments[0]) : 'regular')));
-                                    return getActiveSemesters(effectiveDeptType).map(s => {
-                                        const label = getBatchLabel(s, effectiveDeptType);
-                                        return <option key={s} value={s}>Sem {s}{label ? ` (${label})` : ''}</option>;
-                                    });
-                                })()}
-                            </select>
-                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                        </div>
                     </div>
 
                     {/* Search Bar */}
@@ -1069,11 +839,11 @@ export default function StudentsPage() {
                                                                 </span>
                                                             )}
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                                Sem {student.current_semester}
+                                                                {student.department_name || student.department_code}
                                                             </span>
                                                         </div>
                                                         <div className="text-xs text-gray-500 font-mono mt-0.5">
-                                                            ID: {student.student_id || 'N/A'} • Roll: {student.roll_number}
+                                                            {student.coaching_id && <span>UID: {student.coaching_id} • </span>}ID: {student.student_id || 'N/A'} • Roll: {student.roll_number}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1132,16 +902,16 @@ export default function StudentsPage() {
                                         )}
                                     </div>
 
-                                    <div className="flex items-center gap-2 pt-3 border-t border-gray-50">
-                                        {student.department_code && (
+                                        <div className="flex items-center gap-2 pt-3 border-t border-gray-50">
+                                            {student.coaching_id && (
+                                                <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
+                                                    UID: {student.coaching_id}
+                                                </span>
+                                            )}
                                             <span className="text-xs font-medium text-purple-700 bg-purple-50 px-2 py-1 rounded border border-purple-100">
-                                                {student.department_code}
+                                                {student.department_name || student.department_code}
                                             </span>
-                                        )}
-                                        <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
-                                            Sem {student.current_semester}
-                                        </span>
-                                    </div>
+                                        </div>
                                 </div>
                             ))}
                         </div>
@@ -1195,23 +965,30 @@ export default function StudentsPage() {
                                         <Input
                                             id="studentId"
                                             value={formData.studentId}
-                                            onChange={(e) => handleStudentIdChange(e.target.value.toUpperCase())}
-                                            placeholder={(() => {
-                                                // Dynamic placeholder based on HOD's department
-                                                if (user?.role === 'hod' && user.departmentId) {
-                                                    const hodDept = departments.find(d => d.id === user.departmentId);
-                                                    if (hodDept?.code === 'IT') return 'e.g., BCA2025SC021';
-                                                    if (hodDept?.code === 'BBA') return 'e.g., BBA2025BA021';
-                                                    if (hodDept?.code === 'MCOM') return 'e.g., MCOM2025COM021';
-                                                    // Regular departments
-                                                    return `e.g., BA2025${hodDept?.code || 'HIS'}021`;
-                                                }
-                                                return 'e.g., BA2025HIS069';
-                                            })()}
-                                            className={`rounded-xl border-gray-200 uppercase ${parsedInfo?.isValid ? 'border-emerald-300 bg-emerald-50/30' : ''} ${parsedInfo && !parsedInfo.isValid && formData.studentId.length >= 10 ? 'border-amber-300' : ''}`}
+                                            onChange={(e) => setFormData({ ...formData, studentId: e.target.value.toUpperCase() })}
+                                            placeholder="e.g., BCA2025SC001"
+                                            className={`rounded-xl border-gray-200 uppercase`}
                                             required
                                         />
-                                        {parsedInfo?.error && formData.studentId.length >= 10 && (
+                                    </div>
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <Label htmlFor="coachingId" className="flex items-center gap-2">
+                                            Coaching ID
+                                            {parsedInfo?.isValid && (
+                                                <span className="flex items-center gap-1 text-emerald-600 text-xs font-normal">
+                                                    <CheckCircle2 className="w-3 h-3" />
+                                                    Auto-detected
+                                                </span>
+                                            )}
+                                        </Label>
+                                        <Input
+                                            id="coachingId"
+                                            value={coachingId}
+                                            onChange={(e) => handleCoachingIdChange(e.target.value)}
+                                            placeholder="e.g., lks2026001"
+                                            className={`rounded-xl border-gray-200 lowercase ${parsedInfo?.isValid ? 'border-emerald-300 bg-emerald-50/30' : ''} ${parsedInfo && !parsedInfo.isValid && coachingId.length >= 7 ? 'border-amber-300' : ''}`}
+                                        />
+                                        {parsedInfo?.error && coachingId.length >= 7 && (
                                             <p className="text-amber-600 text-xs mt-1">⚠️ {parsedInfo.error}</p>
                                         )}
                                     </div>
@@ -1242,39 +1019,20 @@ export default function StudentsPage() {
                                             <span className="text-sm font-medium text-emerald-800">Detected Information</span>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
-                                            <span className={`px-2 py-1 text-xs rounded-full font-medium ${parsedInfo.courseType === 'regular' ? 'bg-blue-100 text-blue-700' :
-                                                parsedInfo.courseType === 'vocational' ? 'bg-purple-100 text-purple-700' :
-                                                    'bg-amber-100 text-amber-700'
-                                                }`}>
-                                                {parsedInfo.courseType?.toUpperCase()}
-                                            </span>
-                                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
-                                                Batch: {parsedInfo.admissionYear ? `${parsedInfo.admissionYear}-${String((parsedInfo.admissionYear + (parsedInfo.courseType === 'vocational' ? 3 : 4)) % 100).padStart(2, '0')}` : parsedInfo.batch}
-                                            </span>
-                                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
-                                                Semester: {formData.semester}
-                                            </span>
-                                            {parsedInfo.programVariant && (
-                                                <span className="px-2 py-1 text-xs bg-indigo-100 text-indigo-700 rounded-full">
-                                                    {parsedInfo.programVariant}
+                                            {parsedInfo.batchPrefix && (
+                                                <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full font-medium">
+                                                    Batch: {parsedInfo.batchPrefix.toUpperCase()}
                                                 </span>
                                             )}
+                                            {parsedInfo.year && (
+                                                <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
+                                                    Year: {parsedInfo.year}
+                                                </span>
+                                            )}
+                                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
+                                                Roll: {parsedInfo.rollNumber}
+                                            </span>
                                         </div>
-                                        {/* HOD Warning - if parsed department doesn't match their department */}
-                                        {user?.role === 'hod' && parsedInfo.isValid && (() => {
-                                            const foundDept = findDepartmentByCode(departments, parsedInfo);
-                                            if (foundDept && foundDept.id !== user.departmentId) {
-                                                const hodDept = departments.find(d => d.id === user.departmentId);
-                                                return (
-                                                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
-                                                        <p className="text-red-700 text-xs font-medium">
-                                                            ⚠️ This student belongs to <strong>{foundDept.name}</strong>, but you can only add students to <strong>{hodDept?.name || 'your department'}</strong>.
-                                                        </p>
-                                                    </div>
-                                                );
-                                            }
-                                            return null;
-                                        })()}
                                     </div>
                                 )}
                                 <div>
@@ -1300,127 +1058,55 @@ export default function StudentsPage() {
                                     />
                                 </div>
 
-                                {isSuperAdmin ? (
-                                    <div>
-                                        <Label htmlFor="departmentId">Department *</Label>
-                                        <select
-                                            id="departmentId"
-                                            className="w-full p-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:outline-none bg-white"
-                                            value={formData.departmentId}
-                                            onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                                            required
-                                        >
-                                            <option value="">Select Department</option>
-                                            {departments.map((dept) => (
-                                                <option key={dept.id} value={dept.id}>{dept.code} - {dept.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                ) : (
-                                    <input type="hidden" value={user?.departmentId || ''} />
-                                )}
-
                                 <div>
-                                    <Label htmlFor="semester">Semester *</Label>
+                                    <Label htmlFor="departmentId">Batch *</Label>
                                     <select
-                                        id="semester"
-                                        className="w-full p-2 border border-gray-200 rounded-xl bg-white"
-                                        value={formData.semester}
-                                        onChange={(e) => {
-                                            setFormData({ ...formData, semester: e.target.value });
-                                            if (!selectedStudentId) setSelectedSubjects([]);
-                                        }}
+                                        id="departmentId"
+                                        className="w-full p-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:outline-none bg-white"
+                                        value={formData.departmentId}
+                                        onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                                        required
                                     >
-                                        {getActiveSemesters(getDeptType(departments.find(d => d.id === formData.departmentId))).map(s => {
-                                            const dt = getDeptType(departments.find(d => d.id === formData.departmentId));
-                                            const label = getBatchLabel(s, dt);
-                                            return (
-                                                <option key={s} value={s}>Sem {s}{label ? ` (${label})` : ''}</option>
-                                            );
-                                        })}
+                                        <option value="">Select Batch</option>
+                                        {departments.map((dept) => (
+                                            <option key={dept.id} value={dept.id}>{dept.code} - {dept.name}</option>
+                                        ))}
                                     </select>
                                 </div>
 
-                                {/* Subject Selection */}
+                                {/* Auto-assigned Subjects Info */}
                                 {formData.departmentId ? (
                                     <div className="pt-4 border-t">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <Label className="font-medium">Subjects <span className="text-red-500">*</span></Label>
-                                        </div>
-                                        {getFilteredSubjects().length === 0 ? (
-                                            <p className="text-gray-500 text-sm p-2 mt-2 bg-gray-50 rounded-xl">No subjects available for Semester {formData.semester}.</p>
-                                        ) : (
-                                            <div className="mt-2 space-y-2">
-                                                {/* Dynamic subject fields */}
-                                                {Array.from({ length: subjectFieldCount }).map((_, idx) => {
-                                                    const currentValue = selectedSubjects[idx] || '';
-                                                    // Exclude subjects already selected in OTHER dropdowns
-                                                    const otherSelectedIds = selectedSubjects.filter((_, i) => i !== idx);
-                                                    const availableOptions = getFilteredSubjects().filter(s => !otherSelectedIds.includes(s.id));
-
-                                                    return (
-                                                        <div key={idx} className="flex items-center gap-2">
-                                                            <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs font-bold shrink-0">
-                                                                {idx + 1}
-                                                            </div>
-                                                            <select
-                                                                className="flex-1 p-2 border border-gray-200 rounded-xl bg-white text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                                                                value={currentValue}
-                                                                onChange={(e) => {
-                                                                    const newVal = e.target.value;
-                                                                    setSelectedSubjects(prev => {
-                                                                        const newArr = [...prev];
-                                                                        // Pad with empty strings if needed
-                                                                        while (newArr.length <= idx) newArr.push('');
-                                                                        newArr[idx] = newVal;
-                                                                        return newArr.filter(Boolean);
-                                                                    });
-                                                                }}
-                                                            >
-                                                                <option value="">Select Subject</option>
-                                                                {availableOptions.map(s => (
-                                                                    <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
-                                                                ))}
-                                                                {/* Keep current value visible even if it's from a different degree type */}
-                                                                {currentValue && !availableOptions.find(s => s.id === currentValue) && (() => {
-                                                                    const found = subjects.find(s => s.id === currentValue);
-                                                                    return found ? <option key={found.id} value={found.id}>{found.code} - {found.name}</option> : null;
-                                                                })()}
-                                                            </select>
-                                                            {/* Remove button — only show if more than 1 field */}
-                                                            {subjectFieldCount > 1 && (
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => removeSubjectAtIndex(idx)}
-                                                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-                                                                    title="Remove subject"
-                                                                >
-                                                                    <X className="w-4 h-4" />
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
-
-                                                {/* Add Subject button */}
-                                                <button
-                                                    type="button"
-                                                    onClick={addSubjectField}
-                                                    className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-2 rounded-xl transition-colors w-full justify-center border border-dashed border-blue-200 mt-1"
-                                                >
-                                                    <Plus className="w-4 h-4" />
-                                                    Add Subject
-                                                </button>
-                                            </div>
-                                        )}
-                                        <p className="text-xs text-gray-500 mt-2 ml-1">
-                                            Selected: {selectedSubjects.filter(Boolean).length} subject(s)
-                                        </p>
+                                        <Label className="font-medium">Subjects</Label>
+                                        {(() => {
+                                            const count = getBatchSubjectCount(formData.departmentId);
+                                            const dept = departments.find(d => d.id === formData.departmentId);
+                                            return count > 0 ? (
+                                                <div className="mt-2 p-4 bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-200 rounded-xl">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                                                        <span className="text-sm font-semibold text-emerald-800">Auto-Assignment</span>
+                                                    </div>
+                                                    <p className="text-sm text-emerald-700">
+                                                        All <span className="font-bold">{count}</span> subject(s) in <span className="font-bold">{dept?.name || dept?.code}</span> batch will be automatically assigned.
+                                                    </p>
+                                                    <div className="mt-2 flex flex-wrap gap-1">
+                                                        {subjects.filter(s => s.departmentId === formData.departmentId).map(s => (
+                                                            <span key={s.id} className="px-2 py-0.5 text-xs bg-white/70 text-emerald-700 rounded-full border border-emerald-100">
+                                                                {s.name}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-gray-500 text-sm p-2 mt-2 bg-gray-50 rounded-xl">No subjects available for this batch yet.</p>
+                                            );
+                                        })()}
                                     </div>
                                 ) : (
                                     <div className="pt-4 border-t">
                                         <p className="text-amber-600 text-sm bg-amber-50 p-3 rounded-xl border border-amber-100">
-                                            Please select a department to view subjects.
+                                            Please select a batch to see auto-assigned subjects.
                                         </p>
                                     </div>
                                 )}
@@ -1517,13 +1203,9 @@ export default function StudentsPage() {
                                             <p className="text-xs text-emerald-700 mt-0.5">Choose the template matching your student type.</p>
                                         </div>
                                         <div className="flex gap-2 flex-wrap">
-                                            <Button variant="outline" onClick={downloadRegularTemplate} className="bg-white text-blue-700 border-blue-200 hover:bg-blue-50">
+                                            <Button variant="outline" onClick={downloadCoachingTemplate} className="bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50">
                                                 <Download className="w-3.5 h-3.5 mr-2" />
-                                                Regular (BA/BSC/BCOM)
-                                            </Button>
-                                            <Button variant="outline" onClick={downloadVocationalTemplate} className="bg-white text-purple-700 border-purple-200 hover:bg-purple-50">
-                                                <Download className="w-3.5 h-3.5 mr-2" />
-                                                Vocational (BCA/BBA)
+                                                Coaching Template
                                             </Button>
                                         </div>
                                     </div>

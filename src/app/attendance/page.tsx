@@ -24,7 +24,7 @@ interface Student {
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -36,19 +36,15 @@ interface Subject {
     subjectCode: string;
     subjectPaperCode?: string | null;
     subjectName: string;
-    subjectSemesters: number[];
     academicYear: string;
     departmentId?: string;
     departmentName?: string;
-    degreeType?: string;
 }
 
 interface Department {
     id: string;
     name: string;
     code: string;
-    deptType: string;
-    degreeType?: string;
 }
 
 interface Holiday {
@@ -66,13 +62,9 @@ export default function AttendancePage() {
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [departments, setDepartments] = useState<Department[]>([]);
     const [teacherDepartmentIds, setTeacherDepartmentIds] = useState<string[]>([]); // All teacher's dept IDs for filtering
-    const [primaryDeptType, setPrimaryDeptType] = useState<string>('regular'); // Primary dept type for batch year calc
-    const [batchConfig, setBatchConfig] = useState<Record<string, Record<string, number>>>({}); // Saved batch mappings from settings
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // Selection States
-    const [availableSemesters, setAvailableSemesters] = useState<number[]>([]);
-    const [selectedSemester, setSelectedSemester] = useState<string>('');
     const [selectedSubjectId, setSelectedSubjectId] = useState('');
     const [selectedSection, setSelectedSection] = useState(''); // Optional section
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
@@ -144,7 +136,6 @@ export default function AttendancePage() {
         fetchTeacherDepartments(token);
         fetchTeacherSubjects(token, parsedUser.id);
         fetchHolidays(token);
-        fetchBatchConfig(token);
         setLoading(false);
     }, [router]);
 
@@ -196,7 +187,6 @@ export default function AttendancePage() {
     const applyDepartments = (allDepts: Department[]) => {
         setDepartments(allDepts);
         setTeacherDepartmentIds(allDepts.map(d => d.id));
-        setPrimaryDeptType(allDepts[0]?.deptType || 'regular');
     };
 
     const fetchTeacherDepartments = async (token: string) => {
@@ -220,8 +210,6 @@ export default function AttendancePage() {
                 id: d.id,
                 name: d.name,
                 code: d.code || '',
-                deptType: d.deptType || 'regular',
-                degreeType: d.degreeType
             }));
 
             // Update with fresh data
@@ -238,18 +226,12 @@ export default function AttendancePage() {
     };
 
     const applySubjects = (assignments: Subject[]) => {
-        // Deduplicate strictly by subject mapping ID to prevent breaking degree mapping
-        // We do NOT deduplicate by code here because different departments might assign 
-        // completely different backend subject records even if they share a paper code
+        // Deduplicate strictly by subject mapping ID
         const uniqueAssignments = Array.from(
             new Map(assignments.map((a: any) => [a.subjectId || a.id, a])).values()
         ) as Subject[];
 
         setSubjects(uniqueAssignments);
-        const semesterSet = new Set<number>();
-        uniqueAssignments.forEach((s: Subject) => s.subjectSemesters.forEach((sem: number) => semesterSet.add(sem)));
-        const semesters = Array.from(semesterSet).sort((a, b) => a - b);
-        setAvailableSemesters(semesters);
     };
 
     const fetchTeacherSubjects = async (token: string, teacherId: string) => {
@@ -304,51 +286,7 @@ export default function AttendancePage() {
         }
     };
 
-    // Fetch batch config (saved semester-to-batch mappings)
-    const fetchBatchConfig = async (token: string) => {
-        try {
-            const res = await fetch('/api/settings/batch-config', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setBatchConfig(data.mappings || {});
-            }
-        } catch (err) {
-            console.error('Error fetching batch config:', err);
-        }
-    };
 
-    // Helper: get batch label for a semester using saved config or fallback to date-calc
-    const getBatchLabel = (sem: number, deptType: string): string => {
-        // 1. Check saved config first
-        const savedMappings = batchConfig[deptType];
-        if (savedMappings && savedMappings[sem.toString()]) {
-            const batchStart = savedMappings[sem.toString()];
-            const duration = (deptType === 'vocational' || deptType === 'pg') ? 3 : 4;
-            const batchEnd = (batchStart + duration) % 100;
-            return `${batchStart}-${String(batchEnd).padStart(2, '0')}`;
-        }
-
-        // 2. Fallback to dynamic calculation
-        const now = new Date();
-        const academicStartYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
-        const yearOffset = Math.floor((sem - 1) / 2);
-        const batchStart = academicStartYear - yearOffset;
-        const duration = (deptType === 'vocational' || deptType === 'pg') ? 3 : 4;
-        const batchEnd = (batchStart + duration) % 100;
-        return `${batchStart}-${String(batchEnd).padStart(2, '0')}`;
-    };
-
-    // Helper: check if a semester is active (not disabled by admin in settings)
-    // If admin has saved config and set a semester to null/empty, it's inactive
-    const isSemesterActive = (sem: number, deptType: string): boolean => {
-        const savedMappings = batchConfig[deptType];
-        // If no saved config exists yet, all semesters are active (first-time setup)
-        if (!savedMappings || Object.keys(savedMappings).length === 0) return true;
-        // If config exists, semester is active only if it has a truthy (non-null) value
-        return !!savedMappings[sem.toString()];
-    };
 
     // Check if selected date is a holiday
     useEffect(() => {
@@ -393,87 +331,41 @@ export default function AttendancePage() {
         }
     }, [selectedDate, holidays, selectedDepartmentId, selectedSubjectId, subjects, teacherDepartmentIds]);
 
-    // Filter subjects by matching department degree_type
+    // Filter subjects by selected batch (department)
     const filteredSubjects = selectedDepartmentId
-        ? subjects.filter(s => {
-            const selectedDept = departments.find(d => d.id === selectedDepartmentId);
-            if (!selectedDept) return true;
-
-            // Fallback to inferring degree type from code if API cache is stale
-            let expectedDegreeType = selectedDept.degreeType;
-            if (!expectedDegreeType) {
-                const upperCode = selectedDept.code.toUpperCase();
-                if (upperCode === 'BCA') expectedDegreeType = 'bca';
-                else if (upperCode === 'IT') expectedDegreeType = 'it';
-                else if (upperCode === 'BBA') expectedDegreeType = 'bba';
-            }
-
-            return expectedDegreeType ? s.degreeType === expectedDegreeType : true;
-        })
+        ? subjects.filter(s => s.departmentId === selectedDepartmentId)
         : subjects;
 
-    // Get semesters for filtered subjects. If filtering resulted in empty, fall back to all subjects
-    const subjectsToUse = filteredSubjects.length > 0 ? filteredSubjects : subjects;
-
-    // Determine active dept type for semester filtering
-    const activeDeptTypeForFilter = selectedDepartmentId
-        ? (departments.find(d => d.id === selectedDepartmentId)?.deptType || primaryDeptType)
-        : primaryDeptType;
-
-    const filteredSemesters = Array.from(
-        new Set(subjectsToUse.flatMap((s: Subject) => s.subjectSemesters))
-    ).filter(sem => isSemesterActive(sem, activeDeptTypeForFilter))
-        .sort((a, b) => a - b);
-
-    // Also filter the base availableSemesters (used when no dept filter is active)
-    const activeAvailableSemesters = availableSemesters.filter(sem =>
-        isSemesterActive(sem, primaryDeptType)
-    );
-
-    // Auto-select subject when semester changes
+    // Auto-select first subject when department changes or subjects reload
     useEffect(() => {
-        if (!selectedSemester) {
+        if (filteredSubjects.length > 0 && !filteredSubjects.find(s => s.subjectId === selectedSubjectId)) {
+            setSelectedSubjectId(filteredSubjects[0].subjectId);
+        } else if (filteredSubjects.length === 0) {
             setSelectedSubjectId('');
             setStudents([]);
-            return;
         }
+    }, [selectedDepartmentId, filteredSubjects.length]);
 
-        // Use subjectsToUse (falls back to all subjects if filter is empty)
-        const semesterSubjects = subjectsToUse.filter(s => s.subjectSemesters.includes(parseInt(selectedSemester)));
-        if (semesterSubjects.length > 0) {
-            // Auto-select the first subject for this semester
-            setSelectedSubjectId(semesterSubjects[0].subjectId);
-        } else {
-            setSelectedSubjectId('');
-        }
-    }, [selectedSemester, subjectsToUse.length, selectedDepartmentId]);
-
-    // Fetch students when subject is selected (triggered by auto-select above)
-    // Refetch when date, subject, department, or semester changes
+    // Fetch students when subject is selected
     useEffect(() => {
         if (selectedSubjectId) {
             fetchStudentsForSubject(selectedSubjectId);
         }
-    }, [selectedSubjectId, selectedDate, selectedDepartmentId, selectedSemester]);
+    }, [selectedSubjectId, selectedDate]);
 
 
     // Shared function to filter enrollments into a student map
     const filterEnrollmentsToStudents = (
         enrollments: any[],
-        semesterSubjectIds: string[]
+        targetSubjectId: string
     ): Map<string, Student> => {
         const allStudentsMap = new Map<string, Student>();
 
         enrollments.forEach((e: any) => {
-            // Only include enrollments from subjects in this semester
             const enrollmentSubjectId = e._fromSubjectId || e.subjectId;
-            if (!semesterSubjectIds.includes(enrollmentSubjectId)) return;
+            if (enrollmentSubjectId !== targetSubjectId) return;
 
             const studentDeptId = e.studentDepartmentId;
-            const studentSemester = e.studentCurrentSemester;
-
-            // Filter by semester
-            if (selectedSemester && studentSemester !== parseInt(selectedSemester)) return;
 
             // Filter by department
             let matchesDepartment = false;
@@ -504,15 +396,12 @@ export default function AttendancePage() {
         const token = localStorage.getItem('token');
         if (!token || !subjectId) return;
 
-        const semesterSubjects = subjectsToUse.filter(s => s.subjectSemesters.includes(parseInt(selectedSemester)));
-        const semesterSubjectIds = semesterSubjects.map(s => s.subjectId);
-
         let hasValidCache = false;
 
         // --- INSTANT LOAD (SWR) ---
         const cachedEnrollments = getFromCache<any[]>(CACHE_KEYS.ENROLLMENTS);
         if (cachedEnrollments && cachedEnrollments.length > 0) {
-            const studentMap = filterEnrollmentsToStudents(cachedEnrollments, semesterSubjectIds);
+            const studentMap = filterEnrollmentsToStudents(cachedEnrollments, subjectId);
             const cachedEnrolledStudents = Array.from(studentMap.values());
 
             if (cachedEnrolledStudents.length > 0) {
@@ -551,8 +440,7 @@ export default function AttendancePage() {
 
         try {
             // === BACKGROUND FETCH: Always fresh data overlay ===
-            const batchIds = semesterSubjectIds.join(',');
-            const res = await fetch(`/api/student-subjects?subjectIds=${batchIds}`, {
+            const res = await fetch(`/api/student-subjects?subjectId=${subjectId}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.status === 401) {
@@ -564,8 +452,6 @@ export default function AttendancePage() {
 
             (data.enrollments || []).forEach((e: any) => {
                 const studentDeptId = e.studentDepartmentId;
-                const studentSemester = e.studentCurrentSemester;
-                if (selectedSemester && studentSemester !== parseInt(selectedSemester)) return;
                 let matchesDepartment = false;
                 if (selectedDepartmentId) {
                     matchesDepartment = studentDeptId === selectedDepartmentId;
@@ -594,7 +480,7 @@ export default function AttendancePage() {
             if (hasValidCache) return; // Silent fail if we have cache
             const cachedFallback = getFromCache<any[]>(CACHE_KEYS.ENROLLMENTS);
             if (cachedFallback) {
-                const studentMap = filterEnrollmentsToStudents(cachedFallback, semesterSubjectIds);
+                const studentMap = filterEnrollmentsToStudents(cachedFallback, subjectId);
                 enrolledStudents = Array.from(studentMap.values());
             }
         }
@@ -1074,7 +960,7 @@ export default function AttendancePage() {
                                     max={new Date().toLocaleDateString('en-CA')}
                                     onChange={(e) => setSelectedDate(e.target.value)}
                                     className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 w-[140px]"
-                                    disabled={user?.role === 'teacher' || user?.role === 'hod'}
+                                    disabled={user?.role === 'teacher' || user?.role === 'super_admin'}
                                 />
                             </div>
 
@@ -1096,19 +982,18 @@ export default function AttendancePage() {
                     {!isHoliday && (
                         <div className="p-4">
                             <div className="flex gap-2">
-                                {/* Department filter if multiple */}
+                                {/* Batch filter if multiple */}
                                 {departments.length > 1 && (
                                     <select
                                         className="flex-1 px-3 py-2.5 bg-white border rounded-xl text-sm font-medium"
                                         value={selectedDepartmentId}
                                         onChange={(e) => {
                                             setSelectedDepartmentId(e.target.value);
-                                            // Keep selected semester as requested
                                             setSelectedSubjectId('');
                                             e.target.blur();
                                         }}
                                     >
-                                        <option value="">All Depts</option>
+                                        <option value="">All Batches</option>
                                         {departments.map(dept => (
                                             <option key={dept.id} value={dept.id}>
                                                 {dept.code}
@@ -1117,31 +1002,26 @@ export default function AttendancePage() {
                                     </select>
                                 )}
 
-                                {/* Semester dropdown */}
+                                {/* Subject dropdown */}
                                 <select
                                     className={`${departments.length > 1 ? 'flex-1' : 'w-full'} px-3 py-2.5 bg-white border rounded-xl text-sm font-medium`}
-                                    value={selectedSemester}
+                                    value={selectedSubjectId}
                                     onChange={(e) => {
-                                        setSelectedSemester(e.target.value);
+                                        setSelectedSubjectId(e.target.value);
                                         e.target.blur();
                                     }}
                                 >
-                                    <option value="">Select Semester</option>
-                                    {(departments.length > 1 && selectedDepartmentId ? filteredSemesters : activeAvailableSemesters).map(sem => {
-                                        const activeDept = selectedDepartmentId
-                                            ? departments.find(d => d.id === selectedDepartmentId)
-                                            : departments[0] || null;
-                                        const deptType = activeDept?.deptType || primaryDeptType;
-                                        const batchLabel = getBatchLabel(sem, deptType);
-                                        return (
-                                            <option key={sem} value={sem}>Sem {sem} ({batchLabel})</option>
-                                        );
-                                    })}
+                                    <option value="">Select Subject</option>
+                                    {filteredSubjects.map(sub => (
+                                        <option key={sub.subjectId} value={sub.subjectId}>
+                                            {sub.subjectName} ({sub.subjectPaperCode || sub.subjectCode})
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 
                             {subjects.length === 0 && !loading && (
-                                <p className="text-red-500 text-sm text-center py-2">No subjects assigned. Contact HOD.</p>
+                                <p className="text-red-500 text-sm text-center py-2">No subjects assigned. Contact admin.</p>
                             )}
                         </div>
                     )}
@@ -1155,15 +1035,15 @@ export default function AttendancePage() {
                                 <p className="text-sm text-amber-500 mt-2">Attendance cannot be marked on holidays</p>
                             </div>
                         </div>
-                    ) : selectedSemester ? null : (
+                    ) : selectedSubjectId ? null : (
                         <div className="text-center py-16 text-gray-500">
                             <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                            <p>Select a semester to view students</p>
+                            <p>Select a subject to view students</p>
                         </div>
                     )}
 
                     {/* Lecture Number Indicator + Topic Input */}
-                    {selectedSemester && !isHoliday && (
+                    {selectedSubjectId && !isHoliday && (
                         <div className="px-4 mb-3">
                             <div className="bg-linear-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-lg p-3 shadow-sm">
                                 <div className="flex items-center justify-between mb-2">
@@ -1193,7 +1073,7 @@ export default function AttendancePage() {
                         </div>
                     )}
 
-                    {selectedSemester && !isHoliday ? (
+                    {selectedSubjectId && !isHoliday ? (
                         <>
                             {/* Stats Bar */}
                             <div className="px-4 mb-3">
@@ -1314,22 +1194,21 @@ export default function AttendancePage() {
                     {!isHoliday && (
                         <div className="bg-white rounded-lg shadow px-3 py-3 mb-4">
                             <div className="flex flex-col sm:flex-row flex-wrap items-end gap-3">
-                                {/* Department Filter - Full width on mobile, auto on desktop */}
+                                {/* Batch Filter */}
                                 {departments.length > 1 && (
                                     <div className="w-full sm:flex-1 sm:min-w-[150px]">
-                                        <label htmlFor="department-select" className="block text-xs text-gray-500 mb-1">Department</label>
+                                        <label htmlFor="department-select" className="block text-xs text-gray-500 mb-1">Batch</label>
                                         <select
                                             id="department-select"
                                             className="w-full p-2 border rounded bg-white text-sm"
                                             value={selectedDepartmentId}
                                             onChange={(e) => {
                                                 setSelectedDepartmentId(e.target.value);
-                                                // Keep selected semester as requested
                                                 setSelectedSubjectId('');
                                                 e.target.blur();
                                             }}
                                         >
-                                            <option value="">All Departments</option>
+                                            <option value="">All Batches</option>
                                             {departments.map(dept => (
                                                 <option key={dept.id} value={dept.id}>
                                                     {dept.name} ({dept.code})
@@ -1341,31 +1220,24 @@ export default function AttendancePage() {
 
 
 
-                                {/* Semester Selection */}
-                                <div className="w-1/2 sm:flex-1 sm:min-w-[120px] pr-1 sm:pr-0">
-                                    <label htmlFor="semester-select" className="block text-xs text-gray-500 mb-1">Semester</label>
+                                {/* Subject Selection */}
+                                <div className="w-full sm:flex-[2] sm:min-w-[200px]">
+                                    <label htmlFor="subject-select" className="block text-xs text-gray-500 mb-1">Subject</label>
                                     <select
-                                        id="semester-select"
+                                        id="subject-select"
                                         className="w-full p-2 border rounded bg-white text-sm"
-                                        value={selectedSemester}
+                                        value={selectedSubjectId}
                                         onChange={(e) => {
-                                            setSelectedSemester(e.target.value);
+                                            setSelectedSubjectId(e.target.value);
                                             e.target.blur();
                                         }}
                                     >
-                                        <option value="">Select...</option>
-                                        {(departments.length > 1 && selectedDepartmentId ? filteredSemesters : activeAvailableSemesters).map(sem => {
-                                            const activeDept = selectedDepartmentId
-                                                ? departments.find(d => d.id === selectedDepartmentId)
-                                                : departments[0] || null;
-                                            const deptType = activeDept?.deptType || primaryDeptType;
-                                            const batchLabel = getBatchLabel(sem, deptType);
-                                            return (
-                                                <option key={sem} value={sem}>
-                                                    Sem {sem} ({batchLabel})
-                                                </option>
-                                            );
-                                        })}
+                                        <option value="">Select Subject...</option>
+                                        {filteredSubjects.map(sub => (
+                                            <option key={sub.subjectId} value={sub.subjectId}>
+                                                {sub.subjectName} ({sub.subjectPaperCode || sub.subjectCode})
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
 
@@ -1380,18 +1252,6 @@ export default function AttendancePage() {
                                         value={selectedSection}
                                         onChange={(e) => setSelectedSection(e.target.value)}
                                     />
-                                </div>
-
-                                {/* Auto-Selected Subject Display */}
-                                <div className="w-full sm:flex-1 sm:min-w-[180px]">
-                                    <label className="block text-xs text-gray-500 mb-1">Subject</label>
-                                    <div className="p-2 bg-gray-100 rounded border text-sm text-gray-700 font-medium truncate">
-                                        {currentSubject ? (
-                                            <>{currentSubject.subjectName} ({currentSubject.subjectPaperCode || currentSubject.subjectCode})</>
-                                        ) : (
-                                            <span className="text-gray-400">Select semester...</span>
-                                        )}
-                                    </div>
                                 </div>
 
                                 {/* Topic Input (Optional) */}
@@ -1409,7 +1269,7 @@ export default function AttendancePage() {
                             </div>
 
                             {subjects.length === 0 && !loading && (
-                                <p className="text-red-500 text-xs mt-2">No subjects assigned. Contact HOD.</p>
+                                <p className="text-red-500 text-xs mt-2">No subjects assigned. Contact admin.</p>
                             )}
                         </div>
                     )}
@@ -1423,9 +1283,9 @@ export default function AttendancePage() {
                                 <p className="text-sm text-amber-500 mt-3">Attendance cannot be marked on holidays</p>
                             </div>
                         </div>
-                    ) : !selectedSemester ? (
+                    ) : !selectedSubjectId ? (
                         <div className="text-center py-10 text-gray-500">
-                            Please select a semester to view students.
+                            Please select a subject to view students.
                         </div>
                     ) : (
                         <>
@@ -1539,7 +1399,7 @@ export default function AttendancePage() {
                 </main>
 
                 {/* Mobile Floating Save Button - Right Bottom */}
-                {selectedSemester && markedCount > 0 && (
+                {selectedSubjectId && markedCount > 0 && (
                     <div className="md:hidden fixed bottom-6 right-6">
                         <button
                             onClick={saveAttendance}

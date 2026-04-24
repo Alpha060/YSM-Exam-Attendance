@@ -35,18 +35,15 @@ export async function GET(request: NextRequest) {
         const academicYear = searchParams.get('academicYear');
 
         let queryStr = `
-            SELECT ts.id, ts.teacher_id, ts.subject_id, ts.academic_year, ts.created_at, 
-                   u.first_name as teacher_first_name, u.last_name as teacher_last_name,
-                   s.code as subject_code, s.paper_code as subject_paper_code, s.name as subject_name,
-                   s.degree_type,
-                   COALESCE(
-                       (SELECT array_agg(ss.semester ORDER BY ss.semester)
-                        FROM subject_semesters ss WHERE ss.subject_id = s.id),
-                       ARRAY[]::integer[]
-                   ) as subject_semesters
-            FROM teacher_subjects ts
-            JOIN users u ON u.id = ts.teacher_id
-            JOIN subjects s ON s.id = ts.subject_id
+             SELECT ts.id, ts.teacher_id, ts.subject_id, ts.academic_year, ts.created_at, 
+                    u.first_name as teacher_first_name, u.last_name as teacher_last_name,
+                    s.code as subject_code, s.paper_code as subject_paper_code, s.name as subject_name,
+                    s.department_id,
+                    d.name as department_name, d.code as department_code
+             FROM teacher_subjects ts
+             JOIN users u ON u.id = ts.teacher_id
+             JOIN subjects s ON s.id = ts.subject_id
+             LEFT JOIN departments d ON s.department_id = d.id
             WHERE 1=1
         `;
         const params: string[] = [];
@@ -68,7 +65,7 @@ export async function GET(request: NextRequest) {
 
         queryStr += ' ORDER BY ts.created_at DESC';
 
-        const assignments = await query<TeacherSubjectRow & { subject_semesters: number[]; degree_type: string }>(queryStr, params);
+        const assignments = await query<TeacherSubjectRow & { department_id: string; department_name: string; department_code: string }>(queryStr, params);
 
         return NextResponse.json({
             assignments: assignments.map(a => ({
@@ -79,9 +76,10 @@ export async function GET(request: NextRequest) {
                 subjectCode: a.subject_code,
                 subjectPaperCode: a.subject_paper_code || null,
                 subjectName: a.subject_name,
-                subjectSemesters: a.subject_semesters || [],
+                departmentId: a.department_id,
+                departmentName: a.department_name,
+                departmentCode: a.department_code,
                 academicYear: a.academic_year,
-                degreeType: a.degree_type,
                 createdAt: a.created_at
             }))
         });
@@ -106,30 +104,30 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        // Only super_admin and hod can assign teachers
-        if (!['super_admin', 'hod'].includes(payload.role)) {
+        // Only super_admin can assign teachers
+        if (payload.role !== 'super_admin') {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { teacherId, subjectId, subjectCode, degreeType, academicYear } = await request.json();
+        const { teacherId, subjectId, subjectCode, departmentId, academicYear } = await request.json();
 
         if (!teacherId || !academicYear) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
         }
 
-        // If subjectCode + departmentId provided, get all subject IDs for that code
+        // Get subject IDs
         let subjectIds: string[] = [];
 
-        if (subjectCode && degreeType) {
+        if (subjectCode && departmentId) {
             const subjects = await query<{ id: string }>(
-                'SELECT id FROM subjects WHERE code = $1 AND degree_type = $2',
-                [subjectCode, degreeType]
+                'SELECT id FROM subjects WHERE code = $1 AND department_id = $2',
+                [subjectCode, departmentId]
             );
             subjectIds = subjects.map(s => s.id);
         } else if (subjectId) {
             subjectIds = [subjectId];
         } else {
-            return NextResponse.json({ error: 'Subject ID or code+degreeType required' }, { status: 400 });
+            return NextResponse.json({ error: 'Subject ID or code+batch required' }, { status: 400 });
         }
 
         if (subjectIds.length === 0) {
@@ -150,7 +148,7 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({
-            message: `Teacher assigned to ${assignedCount} semester(s) successfully`,
+            message: `Teacher assigned to ${assignedCount} subject(s) successfully`,
             assignedCount
         }, { status: 201 });
     } catch (error) {
@@ -173,7 +171,7 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        if (!['super_admin', 'hod'].includes(payload.role)) {
+        if (payload.role !== 'super_admin') {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 

@@ -6,13 +6,10 @@ interface DepartmentRow {
     id: string;
     name: string;
     code: string;
-    dept_type: string;
-    degree_type: string;
-    hod_name: string | null;
     created_at: Date;
 }
 
-// GET - List all departments
+// GET - List all batches
 export async function GET(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -29,27 +26,14 @@ export async function GET(request: NextRequest) {
         let departments;
         if (payload.role === 'super_admin') {
             departments = await query<DepartmentRow>(
-                `SELECT d.id, d.name, d.code, d.dept_type, d.degree_type, d.created_at,
-                        (
-                            SELECT CONCAT(u.first_name, ' ', u.last_name)
-                            FROM users u
-                            LEFT JOIN user_departments ud ON u.id = ud.user_id
-                            WHERE u.role = 'hod' AND (u.department_id = d.id OR ud.department_id = d.id)
-                            LIMIT 1
-                        ) as hod_name
+                `SELECT d.id, d.name, d.code, d.created_at
                  FROM departments d
                  ORDER BY d.name ASC`
             );
         } else {
+            // Teachers see batches they are assigned to
             departments = await query<DepartmentRow>(
-                `SELECT d.id, d.name, d.code, d.dept_type, d.degree_type, d.created_at,
-                        (
-                            SELECT CONCAT(u.first_name, ' ', u.last_name)
-                            FROM users u
-                            LEFT JOIN user_departments ud ON u.id = ud.user_id
-                            WHERE u.role = 'hod' AND (u.department_id = d.id OR ud.department_id = d.id)
-                            LIMIT 1
-                        ) as hod_name
+                `SELECT d.id, d.name, d.code, d.created_at
                  FROM departments d
                  WHERE d.id IN (
                      SELECT department_id FROM user_departments WHERE user_id = $1
@@ -57,18 +41,18 @@ export async function GET(request: NextRequest) {
                      SELECT department_id FROM users WHERE id = $1
                  )
                  ORDER BY d.name ASC`,
-                 [(payload as any).userId || (payload as any).id]
+                 [payload.userId]
             );
         }
 
         return NextResponse.json({ departments });
     } catch (error) {
-        console.error('Get departments error:', error);
+        console.error('Get batches error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
     }
 }
 
-// POST - Create department (super_admin only)
+// POST - Create batch (super_admin only)
 export async function POST(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -89,11 +73,10 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const name = body.name?.trim();
         const code = body.code?.trim();
-        const deptType = body.deptType?.trim();
 
-        if (!name || !code || !deptType) {
+        if (!name || !code) {
             return NextResponse.json(
-                { error: 'Name, code, and department type are required' },
+                { error: 'Batch name and code are required' },
                 { status: 400 }
             );
         }
@@ -105,26 +88,19 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (!['regular', 'vocational', 'pg'].includes(deptType)) {
-            return NextResponse.json(
-                { error: 'Invalid department type. Must be regular, vocational, or pg' },
-                { status: 400 }
-            );
-        }
-
         const departments = await query<DepartmentRow>(
-            `INSERT INTO departments (name, code, dept_type)
-             VALUES ($1, $2, $3)
-             RETURNING *, NULL as hod_name`,
-            [name, code.toUpperCase(), deptType]
+            `INSERT INTO departments (name, code)
+             VALUES ($1, $2)
+             RETURNING *`,
+            [name, code.toUpperCase()]
         );
 
         return NextResponse.json({ department: departments[0] }, { status: 201 });
     } catch (error: unknown) {
-        console.error('Create department error:', error);
+        console.error('Create batch error:', error);
         if ((error as { code?: string }).code === '23505') {
             return NextResponse.json(
-                { error: 'Department name or code already exists' },
+                { error: 'Batch name or code already exists' },
                 { status: 400 }
             );
         }
@@ -132,7 +108,7 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// PUT - Update department (super_admin only)
+// PUT - Update batch (super_admin only)
 export async function PUT(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -150,10 +126,10 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { id, name, code, deptType } = await request.json();
+        const { id, name, code } = await request.json();
 
         if (!id) {
-            return NextResponse.json({ error: 'Department ID required' }, { status: 400 });
+            return NextResponse.json({ error: 'Batch ID required' }, { status: 400 });
         }
 
         const updateFields: string[] = [];
@@ -162,13 +138,6 @@ export async function PUT(request: NextRequest) {
 
         if (name) { updateFields.push(`name = $${++paramCount}`); params.push(name); }
         if (code) { updateFields.push(`code = $${++paramCount}`); params.push(code.toUpperCase()); }
-        if (deptType) {
-            if (!['regular', 'vocational', 'pg'].includes(deptType)) {
-                return NextResponse.json({ error: 'Invalid department type' }, { status: 400 });
-            }
-            updateFields.push(`dept_type = $${++paramCount}`);
-            params.push(deptType);
-        }
 
         if (updateFields.length === 0) {
             return NextResponse.json({ message: 'No fields to update' });
@@ -179,12 +148,12 @@ export async function PUT(request: NextRequest) {
             params
         );
 
-        return NextResponse.json({ message: 'Department updated successfully' });
+        return NextResponse.json({ message: 'Batch updated successfully' });
     } catch (error: unknown) {
-        console.error('Update department error:', error);
+        console.error('Update batch error:', error);
         if ((error as { code?: string }).code === '23505') {
             return NextResponse.json(
-                { error: 'Department name or code already exists' },
+                { error: 'Batch name or code already exists' },
                 { status: 400 }
             );
         }
@@ -192,7 +161,7 @@ export async function PUT(request: NextRequest) {
     }
 }
 
-// DELETE - Delete department (super_admin only)
+// DELETE - Delete batch (super_admin only)
 export async function DELETE(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -214,48 +183,37 @@ export async function DELETE(request: NextRequest) {
         const id = searchParams.get('id');
 
         if (!id) {
-            return NextResponse.json({ error: 'Department ID required' }, { status: 400 });
+            return NextResponse.json({ error: 'Batch ID required' }, { status: 400 });
         }
 
         // Check for related records
-        const subjectsCheck = await query<{ count: string }>(
-            'SELECT COUNT(*) as count FROM subjects WHERE department_id = $1',
-            [id]
-        );
-        if (parseInt(subjectsCheck[0].count) > 0) {
-            return NextResponse.json(
-                { error: 'Cannot delete department with existing subjects' },
-                { status: 400 }
-            );
-        }
-
         const studentsCheck = await query<{ count: string }>(
             'SELECT COUNT(*) as count FROM students WHERE department_id = $1',
             [id]
         );
         if (parseInt(studentsCheck[0].count) > 0) {
             return NextResponse.json(
-                { error: 'Cannot delete department with existing students' },
+                { error: 'Cannot delete batch with existing students' },
                 { status: 400 }
             );
         }
 
         const teachersCheck = await query<{ count: string }>(
-            'SELECT COUNT(*) as count FROM users WHERE department_id = $1 AND role IN (\'teacher\', \'hod\')',
+            'SELECT COUNT(*) as count FROM users WHERE department_id = $1 AND role = \'teacher\'',
             [id]
         );
         if (parseInt(teachersCheck[0].count) > 0) {
             return NextResponse.json(
-                { error: 'Cannot delete department with existing teachers' },
+                { error: 'Cannot delete batch with existing teachers' },
                 { status: 400 }
             );
         }
 
         await query('DELETE FROM departments WHERE id = $1', [id]);
 
-        return NextResponse.json({ message: 'Department deleted successfully' });
+        return NextResponse.json({ message: 'Batch deleted successfully' });
     } catch (error) {
-        console.error('Delete department error:', error);
+        console.error('Delete batch error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
     }
 }

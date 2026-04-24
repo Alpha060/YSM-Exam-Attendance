@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Only super_admin and hod can enroll students
-        if (!['super_admin', 'hod'].includes(payload.role)) {
+        if (!['super_admin'].includes(payload.role)) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
@@ -176,7 +176,7 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        if (!['super_admin', 'hod'].includes(payload.role)) {
+        if (!['super_admin'].includes(payload.role)) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 

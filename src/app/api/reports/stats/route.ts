@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         // Allow HOD to view as teacher (for My Reports)
         const { searchParams } = new URL(request.url);
         const view = searchParams.get('view');
-        const effectiveRole = (role === 'hod' && view === 'teacher') ? 'teacher' : role;
+        const effectiveRole = (role === 'super_admin' && view === 'teacher') ? 'teacher' : role;
 
         // Build role-based filter conditions
         let studentFilter = '';
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         const subjectParams: string[] = [];
         const attendanceParams: string[] = [];
 
-        if (effectiveRole === 'hod' && userId) {
+        if (effectiveRole === 'super_admin' && userId) {
             // HOD: filter by ALL their authorized departments (including user_departments)
             studentFilter = `AND s.department_id IN (
                 SELECT department_id FROM users WHERE id = $1
@@ -182,7 +182,7 @@ export async function GET(request: NextRequest) {
         let lowAttendanceCount = 0;
         let warningAttendanceCount = 0;
 
-        if (effectiveRole === 'hod' || effectiveRole === 'super_admin') {
+        if (effectiveRole === 'super_admin') {
             promises.push((async () => {
                 try {
                     // Get student-wise attendance percentages
@@ -271,7 +271,7 @@ export async function GET(request: NextRequest) {
                 workingDays,
                 averageAttendance,
                 // Role-specific data
-                ...(effectiveRole === 'hod' || effectiveRole === 'super_admin' ? {
+                ...(effectiveRole === 'super_admin' ? {
                     lowAttendanceCount,
                     warningAttendanceCount,
                 } : {}),

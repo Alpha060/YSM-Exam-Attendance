@@ -154,7 +154,7 @@ export async function GET(request: NextRequest) {
                 u.department_id,
                 CONCAT(u.first_name, ' ', u.last_name) as hod_name
             FROM users u
-            WHERE u.role = 'hod'
+            WHERE u.role = 'teacher'
               AND u.is_active = true
         `);
         const hodByDept: Record<string, string> = {};

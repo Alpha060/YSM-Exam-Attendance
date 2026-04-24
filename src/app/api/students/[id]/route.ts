@@ -15,7 +15,7 @@ export async function DELETE(
 
         const token = authHeader.split(' ')[1];
         const payload = verifyToken(token);
-        if (!payload || !['super_admin', 'hod'].includes(payload.role)) {
+        if (!payload || !['super_admin'].includes(payload.role)) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 

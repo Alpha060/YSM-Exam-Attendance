@@ -8,7 +8,7 @@ interface UserRow {
     password_hash: string;
     first_name: string;
     last_name: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     department_id: string | null;
 }
 

@@ -2,42 +2,19 @@ export interface Department {
     id: string;
     name: string;
     code: string;
-    hod_name?: string;
-    createdAt: Date;
-    updatedAt: Date;
-}
-
-export type ProgramType = 'regular' | 'vocational' | 'postgraduate';
-
-export interface Program {
-    id: string;
-    name: string;
-    code: string;
-    departmentId: string;
-    programType: ProgramType;
-    durationYears: number;
-    createdAt: Date;
-    updatedAt: Date;
-}
-
-export interface Section {
-    id: string;
-    name: string;
-    programId: string;
-    semester?: number;
     createdAt: Date;
     updatedAt: Date;
 }
 
 export interface Student {
     id: string;
-    rollNumber: string;
-    smartCardId: string | null;
+    studentId: string;
+    coachingId: string | null;
+    rollNumber: number;
     firstName: string;
     lastName: string;
     email: string | null;
-    programId: string;
-    sectionId: string | null;
+    departmentId: string;
     currentSemester: number;
     batchYear: number;
     isActive: boolean;
@@ -49,8 +26,7 @@ export interface Subject {
     id: string;
     code: string;
     name: string;
-    programId: string;
-    semester: number;
+    departmentId: string;
     credits: number;
     createdAt: Date;
     updatedAt: Date;

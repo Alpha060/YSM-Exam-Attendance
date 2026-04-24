@@ -53,8 +53,8 @@ export function ProfileModal({ isOpen, onClose, user, onLogout }: ProfileModalPr
     useEffect(() => {
         if (!isOpen) return;
 
-        const isTeacherOrHod = user.role === 'teacher' || user.role === 'hod';
-        if (!isTeacherOrHod || !user.id) return;
+        const isTeacher = user.role === 'teacher';
+        if (!isTeacher || !user.id) return;
 
         // 1. Try to load instantly from cache
         try {
@@ -198,8 +198,8 @@ export function ProfileModal({ isOpen, onClose, user, onLogout }: ProfileModalPr
                             </div>
                         )}
 
-                        {/* Assigned Subjects (Teachers / HODs only) */}
-                        {(user.role === 'teacher' || user.role === 'hod') && (
+                        {/* Assigned Subjects (Teachers only) */}
+                        {user.role === 'teacher' && (
                             <div className="flex flex-col gap-4">
                                 <div className="flex items-center justify-between pb-3 border-b border-gray-100 w-full">
                                     <div className="flex items-center gap-2.5">

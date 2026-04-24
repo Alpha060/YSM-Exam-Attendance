@@ -63,7 +63,7 @@ export async function GET(
         // Allow HOD to view as teacher (for My Reports)
         const view = searchParams.get('view');
         const { role, userId } = payload;
-        const effectiveRole = (role === 'hod' && view === 'teacher') ? 'teacher' : role;
+        const effectiveRole = (role === 'super_admin' && view === 'teacher') ? 'teacher' : role;
 
         // Get student basic info
         const studentInfo = await query<StudentDetail>(

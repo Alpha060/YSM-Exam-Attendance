@@ -15,11 +15,11 @@ export async function DELETE(
 
         const token = authHeader.split(' ')[1];
         const payload = verifyToken(token);
-        if (!payload || !['super_admin', 'hod'].includes(payload.role)) {
+        if (!payload || !['super_admin'].includes(payload.role)) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        if (payload.role === 'hod') {
+        if (payload.role === 'super_admin') {
             const check = await query<any>('SELECT department_id FROM holidays WHERE id = $1', [id]);
             if (check.length === 0 || check[0].department_id !== payload.departmentId) {
                 return NextResponse.json({ error: 'Cannot delete global or other department holidays' }, { status: 403 });

@@ -31,7 +31,7 @@ export async function GET(
             `SELECT d.id, d.name, d.code,
                     CONCAT(u.first_name, ' ', u.last_name) as hod_name
              FROM departments d
-             LEFT JOIN users u ON u.department_id = d.id AND u.role = 'hod'
+             LEFT JOIN users u ON u.department_id = d.id AND u.role = 'teacher'
              WHERE d.id = $1`,
             [id]
         );

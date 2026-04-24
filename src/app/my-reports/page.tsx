@@ -11,7 +11,7 @@ import { useRealtimeData } from '@/hooks/useRealtimeData';
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;

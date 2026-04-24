@@ -10,7 +10,7 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
 export interface JWTPayload {
     userId: string;
     email: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     departmentId?: string;
 }
 

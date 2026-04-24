@@ -47,14 +47,13 @@ interface Teacher {
     department_name?: string;
     department_code?: string;
     departments?: DepartmentInfo[];
-    subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; semesters: number[]; }[];
+    subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; departmentId?: string; }[];
 }
 
 interface Department {
     id: string;
     name: string;
     code: string;
-    degree_type: string;
 }
 
 interface Subject {
@@ -62,23 +61,14 @@ interface Subject {
     code: string;
     paperCode?: string | null;
     name: string;
-    degreeType: string;
-    semesters: number[];
-}
-
-interface GroupedSubject {
-    code: string;
-    paperCode?: string | null;
-    name: string;
-    degreeTypes: string[];
-    semesters: number[];
+    departmentId: string;
 }
 
 interface User {
     firstName: string;
     lastName: string;
     email: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     departmentId?: string;
 }
 
@@ -116,60 +106,17 @@ export default function TeachersPage() {
     // Default academic year
     const [academicYear] = useState('2025-2026');
 
-    // Group subjects by code for dropdown
-    const groupedSubjects = useMemo(() => {
-        const groups: Map<string, GroupedSubject> = new Map();
-
-        subjects.forEach(subject => {
-            const key = subject.code; // Group ONLY by code
-
-            if (groups.has(key)) {
-                const group = groups.get(key)!;
-                if (!group.degreeTypes.includes(subject.degreeType)) {
-                    group.degreeTypes.push(subject.degreeType);
-                }
-                for (const sem of subject.semesters) {
-                    if (!group.semesters.includes(sem)) {
-                        group.semesters.push(sem);
-                    }
-                }
-            } else {
-                groups.set(key, {
-                    code: subject.code,
-                    paperCode: subject.paperCode || null,
-                    name: subject.name,
-                    degreeTypes: [subject.degreeType],
-                    semesters: [...subject.semesters]
-                });
-            }
-        });
-
-        // Sort semesters within each group
-        groups.forEach(group => group.semesters.sort((a, b) => a - b));
-
-        return Array.from(groups.entries());
-    }, [subjects]);
-
-    // Filter subjects based on selected departments' degree_types
+    // Filter subjects based on selected departments (batches)
     const filteredSubjects = useMemo(() => {
         if (selectedDepartmentIds.length === 0) return [];
-        // Get the degree_types of selected departments
-        const selectedDegreeTypes = departments
-            .filter(d => selectedDepartmentIds.includes(d.id))
-            .map(d => d.degree_type);
-        
-        // Include if the grouped subject contains ANY of the selected degree types
-        const filtered = groupedSubjects.filter(([, g]) => 
-            g.degreeTypes.some(dt => selectedDegreeTypes.includes(dt))
-        );
-        
-        // Sort according to paper code
-        return filtered.sort(([, a], [, b]) => {
-            const paperA = (a.paperCode || a.code || '').toLowerCase();
-            const paperB = (b.paperCode || b.code || '').toLowerCase();
-            return paperA.localeCompare(paperB, undefined, { numeric: true, sensitivity: 'base' });
-        });
-    }, [groupedSubjects, selectedDepartmentIds, departments]);
+        return subjects
+            .filter(s => selectedDepartmentIds.includes(s.departmentId))
+            .sort((a, b) => {
+                const codeA = (a.paperCode || a.code || '').toLowerCase();
+                const codeB = (b.paperCode || b.code || '').toLowerCase();
+                return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+    }, [subjects, selectedDepartmentIds]);
 
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -272,7 +219,7 @@ export default function TeachersPage() {
 
     const resetForm = () => {
         // For HOD users, auto-set their departmentId
-        const defaultDeptIds = user?.role === 'hod' && user.departmentId ? [user.departmentId] : [];
+        const defaultDeptIds = user?.role === 'super_admin' && user.departmentId ? [user.departmentId] : [];
         setFormData({ name: '', email: '', role: 'teacher', password: '' });
         setSelectedDepartmentIds(defaultDeptIds);
         setSelectedSubjectKeys([]);
@@ -285,15 +232,12 @@ export default function TeachersPage() {
     const handleDepartmentToggle = (deptId: string) => {
         setSelectedDepartmentIds(prev => {
             if (prev.includes(deptId)) {
-                // Remove department and also remove subjects from that department's degree_type
+                // Remove department and also remove subjects from that department
                 const newDepts = prev.filter(id => id !== deptId);
-                const dept = departments.find(d => d.id === deptId);
-                if (dept) {
-                    const deptSubjectKeys = groupedSubjects
-                        .filter(([, g]) => g.degreeTypes.includes(dept.degree_type) && g.degreeTypes.length === 1)
-                        .map(([key]) => key);
-                    setSelectedSubjectKeys(prevSubs => prevSubs.filter(k => !deptSubjectKeys.includes(k)));
-                }
+                const deptSubjectIds = subjects
+                    .filter(s => s.departmentId === deptId)
+                    .map(s => s.id);
+                setSelectedSubjectKeys(prevSubs => prevSubs.filter(k => !deptSubjectIds.includes(k)));
                 return newDepts;
             } else {
                 return [...prev, deptId];
@@ -301,12 +245,12 @@ export default function TeachersPage() {
         });
     };
 
-    const handleSubjectToggle = (subjectKey: string) => {
+    const handleSubjectToggle = (subjectId: string) => {
         setSelectedSubjectKeys(prev => {
-            if (prev.includes(subjectKey)) {
-                return prev.filter(k => k !== subjectKey);
+            if (prev.includes(subjectId)) {
+                return prev.filter(k => k !== subjectId);
             } else {
-                return [...prev, subjectKey];
+                return [...prev, subjectId];
             }
         });
     };
@@ -331,16 +275,10 @@ export default function TeachersPage() {
         }
         setSelectedDepartmentIds(deptIds);
 
-        // Set selected subjects
+        // Set selected subjects (now using subject IDs directly)
         if (teacher.subjects && teacher.subjects.length > 0) {
-            const subjectKeys = new Set<string>();
-            teacher.subjects.forEach(sub => {
-                const matchingSubject = subjects.find(s => s.id === sub.subjectId);
-                if (matchingSubject) {
-                    subjectKeys.add(matchingSubject.code);
-                }
-            });
-            setSelectedSubjectKeys(Array.from(subjectKeys));
+            const subjectIds = teacher.subjects.map(sub => sub.subjectId);
+            setSelectedSubjectKeys(subjectIds);
         } else {
             setSelectedSubjectKeys([]);
         }
@@ -358,7 +296,7 @@ export default function TeachersPage() {
         const token = localStorage.getItem('token');
 
         if (selectedDepartmentIds.length === 0) {
-            setError('Please select at least one department');
+            setError('Please select at least one batch');
             return;
         }
 
@@ -459,16 +397,8 @@ export default function TeachersPage() {
                 });
             }
 
-            // Determine which exact subject IDs they SHOULD have based on selected codes AND selected departments
-            const targetDegreeTypes = departments
-                .filter(d => selectedDepartmentIds.includes(d.id))
-                .map(d => d.degree_type);
-
-            const targetSubjectIds = new Set<string>();
-            const targetSubjects = subjects.filter(s => 
-                selectedSubjectKeys.includes(s.code) && targetDegreeTypes.includes(s.degreeType)
-            );
-            targetSubjects.forEach(s => targetSubjectIds.add(s.id));
+            // Determine which subject IDs they SHOULD have (selected subject IDs)
+            const targetSubjectIds = new Set<string>(selectedSubjectKeys);
 
             // Find assignments to remove (in current, not in target)
             if (currentTeacher?.subjects) {
@@ -483,8 +413,8 @@ export default function TeachersPage() {
             }
 
             // Find assignments to add (in target, not in current)
-            for (const subject of targetSubjects) {
-                if (!currentAssignmentSubjectIds.has(subject.id)) {
+            for (const subjectId of targetSubjectIds) {
+                if (!currentAssignmentSubjectIds.has(subjectId)) {
                     await fetch('/api/teacher-subjects', {
                         method: 'POST',
                         headers: {
@@ -493,8 +423,7 @@ export default function TeachersPage() {
                         },
                         body: JSON.stringify({
                             teacherId,
-                            subjectCode: subject.code,
-                            degreeType: subject.degreeType,
+                            subjectId,
                             academicYear
                         }),
                     });
@@ -516,6 +445,7 @@ export default function TeachersPage() {
             'full name': 'name', 'fullname': 'name', 'teacher name': 'name', 'name*': 'name',
             'last name': 'last_name', 'lastname': 'last_name', 'surname': 'last_name', 'last_name': 'last_name', 'last_name*': 'last_name',
             'department': 'department_code', 'dept': 'department_code', 'department code': 'department_code', 'department_code': 'department_code', 'department_code*': 'department_code',
+            'batch_code': 'department_code', 'batch code': 'department_code', 'batch_code*': 'department_code', 'batch': 'department_code',
             'role': 'role', 'position': 'role', 'type': 'role', 'role*': 'role',
             'password': 'password', 'pass': 'password',
             'subjects': 'subject_codes', 'subject codes': 'subject_codes', 'subject_codes': 'subject_codes', 'assigned subjects': 'subject_codes'
@@ -585,12 +515,12 @@ export default function TeachersPage() {
 
     const downloadTemplate = () => {
         // Teachers template - all mandatory except password and subjects
-        const headers = ['email*', 'name*', 'department_code*', 'role*', 'password', 'subject_codes'];
+        const headers = ['email*', 'name*', 'batch_code*', 'role*', 'password', 'subject_codes'];
         const dummyData = [
-            ['teacher1@college.edu', 'Amit Sharma', 'IT', 'teacher', '', 'Programming,DBMS'],
-            ['teacher2@college.edu', 'Priya Verma', 'HIS', 'teacher', '', 'History,Political Science'],
-            ['hod.physics@college.edu', 'Dr. Rajesh Kumar', 'PHY', 'hod', 'custom123', 'Physics,Mathematics'],
-            ['hod.bba@college.edu', 'Dr. Neha Singh', 'BBA', 'hod', '', 'Management,Marketing,Accounts']
+            ['teacher1@college.edu', 'Amit Sharma', 'LKS', 'teacher', '', 'Programming,DBMS'],
+            ['teacher2@college.edu', 'Priya Verma', 'ARB', 'teacher', '', 'History,Political Science'],
+            ['teacher3@college.edu', 'Dr. Rajesh Kumar', 'LKS', 'teacher', 'custom123', 'Physics,Mathematics'],
+            ['teacher4@college.edu', 'Dr. Neha Singh', 'ARB', 'teacher', '', 'Management,Marketing,Accounts']
         ];
 
         const csvContent = [
@@ -685,7 +615,7 @@ export default function TeachersPage() {
     if (loading) return <PageSkeleton type="teachers" />;
 
     const isSuperAdmin = user?.role === 'super_admin';
-    const canManage = user?.role === 'super_admin' || user?.role === 'hod';
+    const canManage = user?.role === 'super_admin';
 
     // Teachers cannot access this page
     if (user?.role === 'teacher') {
@@ -829,7 +759,7 @@ export default function TeachersPage() {
                                                     <div>
                                                         <div className="flex items-center gap-2 flex-wrap">
                                                             <div className="font-semibold text-gray-900">{teacher.first_name} {teacher.last_name}</div>
-                                                            {teacher.role === 'hod' && (
+                                                            {teacher.role === 'super_admin' && (
                                                                 <span className="inline-block px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded border border-blue-100 uppercase tracking-wide">
                                                                     HOD
                                                                 </span>
@@ -917,7 +847,7 @@ export default function TeachersPage() {
                                                     ))}
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-0.5">
-                                                    {teacher.role === 'hod' && (
+                                                    {teacher.role === 'super_admin' && (
                                                         <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded border border-blue-100 uppercase">
                                                             HOD
                                                         </span>
@@ -1077,45 +1007,24 @@ export default function TeachersPage() {
                                                 />
                                                 <span className="text-sm font-medium">Teacher</span>
                                             </label>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="radio"
-                                                    name="role"
-                                                    value="hod"
-                                                    checked={formData.role === 'hod'}
-                                                    onChange={(e) => setFormData({ ...formData, role: 'hod' })}
-                                                    className="w-4 h-4 text-blue-600"
-                                                />
-                                                <span className="text-sm font-medium">HOD</span>
-                                            </label>
                                         </div>
                                     </div>
                                 )}
 
-                                {/* Departments Section */}
+                                {/* Batches Section */}
                                 <div className="space-y-3 pt-2 border-t border-gray-100">
-                                    <Label className="text-base font-semibold text-gray-800">Assign Departments</Label>
+                                    <Label className="text-base font-semibold text-gray-800">Assign Batches</Label>
                                     <p className="text-xs text-gray-500 -mt-1">
-                                        {user?.role === 'hod'
-                                            ? 'Teacher will be assigned to your department.'
-                                            : 'Select departments this teacher belongs to.'}
+                                        Select batches this teacher belongs to.
                                     </p>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                                         {departments
                                             // For HOD: filter to only show their department when adding,
                                             // or teacher's departments + their own when editing
-                                            .filter(dept => {
-                                                if (user?.role !== 'hod') return true; // Admin sees all
-                                                // HOD sees: their own department always
-                                                if (dept.id === user.departmentId) return true;
-                                                // When editing: also show teacher's other assigned departments (read-only)
-                                                if (selectedTeacherId && selectedDepartmentIds.includes(dept.id)) return true;
-                                                return false;
-                                            })
+                                            .filter(() => true) // Admin sees all
                                             .map(dept => {
-                                                const isHodDept = user?.role === 'hod' && dept.id === user.departmentId;
-                                                const isOtherDept = user?.role === 'hod' && dept.id !== user.departmentId;
+                                                const isOtherDept = false;
 
                                                 return (
                                                     <label
@@ -1151,7 +1060,7 @@ export default function TeachersPage() {
                                             })}
                                     </div>
                                     {selectedDepartmentIds.length === 0 && (
-                                        <p className="text-red-500 text-xs">Please select at least one department.</p>
+                                        <p className="text-red-500 text-xs">Please select at least one batch.</p>
                                     )}
                                 </div>
 
@@ -1159,32 +1068,29 @@ export default function TeachersPage() {
                                 {filteredSubjects.length > 0 && (
                                     <div className="space-y-3 pt-2 border-t border-gray-100">
                                         <Label className="text-base font-semibold text-gray-800">Assign Subjects</Label>
-                                        <p className="text-xs text-gray-500 -mt-1">Select subjects this teacher teaches.</p>
+                                        <p className="text-xs text-gray-500 -mt-1">Select subjects this teacher teaches from the selected batches.</p>
 
                                         <div className="max-h-48 overflow-y-auto pr-1 space-y-1">
-                                            {filteredSubjects.map(([key, group]) => (
+                                            {filteredSubjects.map((subject) => (
                                                 <label
-                                                    key={key}
+                                                    key={subject.id}
                                                     className={`
                                                         flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors
-                                                        ${selectedSubjectKeys.includes(key) ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}
+                                                        ${selectedSubjectKeys.includes(subject.id) ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}
                                                     `}
                                                 >
                                                     <div className="flex items-center gap-3">
                                                         <input
                                                             type="checkbox"
-                                                            checked={selectedSubjectKeys.includes(key)}
-                                                            onChange={() => handleSubjectToggle(key)}
+                                                            checked={selectedSubjectKeys.includes(subject.id)}
+                                                            onChange={() => handleSubjectToggle(subject.id)}
                                                             className="w-4 h-4 text-amber-600 rounded border-gray-300 focus:ring-amber-500"
                                                         />
                                                         <div>
                                                             <div className="text-sm font-medium text-gray-900">
-                                                                {group.degreeTypes.length > 0 && (
-                                                                    <span className="text-amber-600 font-bold mr-1">[{group.degreeTypes.map(d => d.toUpperCase()).join(', ')}]</span>
-                                                                )}
-                                                                {group.name}
+                                                                {subject.name}
                                                             </div>
-                                                            <div className="text-xs text-gray-500">{group.paperCode || group.code} • Sem {group.semesters.join(', ')}</div>
+                                                            <div className="text-xs text-gray-500">{subject.paperCode || subject.code}</div>
                                                         </div>
                                                     </div>
                                                 </label>
@@ -1245,7 +1151,7 @@ export default function TeachersPage() {
                                 <div className="mt-0.5"><FileSpreadsheet className="w-5 h-5" /></div>
                                 <div>
                                     <p className="font-semibold">Bulk Import Instructions</p>
-                                    <p className="mt-1 opacity-90">Upload a CSV or Excel file containing teacher details. Columns required: <code>email</code>, <code>first_name</code>, <code>last_name</code>, <code>department_code</code>, <code>role</code>.</p>
+                                    <p className="mt-1 opacity-90">Upload a CSV or Excel file containing teacher details. Columns required: <code>email</code>, <code>name</code>, <code>batch_code</code>, <code>role</code>.</p>
                                 </div>
                             </div>
 

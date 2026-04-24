@@ -58,14 +58,14 @@ export async function GET(request: NextRequest) {
 
         // Allow HOD to view as teacher (for My Reports)
         const view = searchParams.get('view');
-        const effectiveRole = (role === 'hod' && view === 'teacher') ? 'teacher' : role;
+        const effectiveRole = (role === 'super_admin' && view === 'teacher') ? 'teacher' : role;
 
         // Build role-based filter
         const filters: string[] = [];
         const params: (string | number)[] = [parseInt(year), parseInt(monthNum)];
 
         // Role-based restrictions
-        if (effectiveRole === 'hod') {
+        if (effectiveRole === 'super_admin') {
             if (departmentId) {
                 filters.push(`ar.student_id IN (
                     SELECT id FROM students WHERE department_id = $${params.length + 1}

@@ -30,14 +30,12 @@ export async function GET(request: NextRequest) {
         if (rows.length > 0) {
             mappings = rows[0].value;
         } else {
-            // Fallback to legacy check if no explicit setting exists yet
+            // Fallback: get semester distribution across all students
             const legacyRows = await query<{ current_semester: number, batch_year: number }>(
                 `SELECT current_semester, MODE() WITHIN GROUP (ORDER BY batch_year) as batch_year
                  FROM students 
-                 WHERE department_id IN (SELECT id FROM departments WHERE dept_type = $1)
                  GROUP BY current_semester
-                 ORDER BY current_semester`,
-                [deptType]
+                 ORDER BY current_semester`
             );
             const legacyMappings: Record<number, number> = {};
             legacyRows.forEach(row => {
@@ -88,14 +86,13 @@ export async function POST(request: NextRequest) {
                     continue; // Skip invalid mappings
                 }
 
-                // Update students belonging to the specific department type and batch year
+                // Update students belonging to the specific batch year
                 const result = await query(
                     `UPDATE students 
                      SET current_semester = $1, updated_at = CURRENT_TIMESTAMP
                      WHERE batch_year = $2 
-                     AND department_id IN (SELECT id FROM departments WHERE dept_type = $3)
                      RETURNING id`,
-                    [semester, batchYear, deptType]
+                    [semester, batchYear]
                 );
 
                 totalUpdated += result.length;

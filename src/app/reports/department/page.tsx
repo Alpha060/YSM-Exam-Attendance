@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 
 interface User {
     id: string;
-    role: 'super_admin' | 'hod' | 'teacher';
+    role: 'super_admin' | 'teacher';
     firstName: string;
     lastName: string;
     email: string;
@@ -101,7 +101,7 @@ export default function DepartmentOverviewPage() {
 
         if (parsedUser.role === 'super_admin') {
             fetchDepartments(token);
-        } else if (parsedUser.role === 'hod') {
+        } else if (parsedUser.role === 'super_admin') {
             fetchTeacherDepartments(token, parsedUser.id, parsedUser.departmentId);
         } else {
             if (parsedUser.departmentId) {
@@ -284,7 +284,7 @@ export default function DepartmentOverviewPage() {
                             <span className="text-rose-400 font-semibold tracking-wide uppercase text-sm">Reports</span>
                         </div>
                         <h1 className="text-2xl font-bold mb-2 flex items-center gap-3">
-                            Department Overview <span className="inline-block animate-bounce">🏢</span>
+                            Batch Overview <span className="inline-block animate-bounce">🏢</span>
                         </h1>
                         <p className="text-rose-100 text-sm max-w-xl">
                             {data?.department ? data.department.name : 'View detailed performance metrics, subject-wise analysis, and student alerts.'}
@@ -306,7 +306,7 @@ export default function DepartmentOverviewPage() {
                                     ))}
                                 </select>
                             ) : (
-                                <span>{data?.department?.name || 'Department'}</span>
+                                <span>{data?.department?.name || 'Batch'}</span>
                             )}
                         </div>
 

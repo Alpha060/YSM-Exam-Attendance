@@ -173,6 +173,33 @@ const MIGRATIONS: { name: string; sql: string }[] = [
             );
         `
     },
+    {
+        name: '007_coaching_center_conversion',
+        sql: `
+            -- Add coaching_id to students table
+            ALTER TABLE students ADD COLUMN IF NOT EXISTS coaching_id VARCHAR(50) UNIQUE;
+            CREATE INDEX IF NOT EXISTS idx_students_coaching_id ON students(coaching_id);
+
+            -- Add department_id to subjects table (link subjects to batches directly)
+            ALTER TABLE subjects ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES departments(id);
+            CREATE INDEX IF NOT EXISTS idx_subjects_department_id ON subjects(department_id);
+
+            -- Make degree_type nullable (no longer required for coaching center)
+            DO $$
+            BEGIN
+                ALTER TABLE subjects ALTER COLUMN degree_type DROP NOT NULL;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END $$;
+
+            -- Make dept_type and degree_type nullable on departments
+            DO $$
+            BEGIN
+                ALTER TABLE departments ALTER COLUMN dept_type DROP NOT NULL;
+                ALTER TABLE departments ALTER COLUMN degree_type DROP NOT NULL;
+            EXCEPTION WHEN OTHERS THEN NULL;
+            END $$;
+        `
+    },
 ];
 
 export async function runMigrations() {
