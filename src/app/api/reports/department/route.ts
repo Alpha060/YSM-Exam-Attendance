@@ -8,17 +8,10 @@ interface DepartmentInfo {
     code: string;
 }
 
-interface SemesterStats {
-    semester: string;
-    total_students: string;
-    avg_attendance: string;
-}
-
 interface SubjectStats {
     id: string;
     name: string;
     code: string;
-    semester: string;
     total_students: string;
     avg_attendance: string;
 }
@@ -28,7 +21,6 @@ interface StudentAlert {
     student_id: string;
     roll_number: string;
     name: string;
-    semester: string;
     attendance_pct: string;
 }
 
@@ -54,10 +46,19 @@ export async function GET(request: NextRequest) {
         }
 
         const searchParams = request.nextUrl.searchParams;
-        const selectedDeptId = searchParams.get('departmentId') || userDeptId;
+        let selectedDeptId = searchParams.get('departmentId') || userDeptId;
+
+        // If still no dept, pick the first available department for super_admin
+        if (!selectedDeptId && role === 'super_admin') {
+            const firstDept = await queryOne<{ id: string }>(
+                `SELECT id FROM departments ORDER BY name LIMIT 1`,
+                []
+            );
+            selectedDeptId = firstDept?.id || null;
+        }
 
         if (!selectedDeptId) {
-            return NextResponse.json({ error: 'Department ID required' }, { status: 400 });
+            return NextResponse.json({ error: 'No departments found' }, { status: 404 });
         }
 
         // Security check: super_admin has access to all departments
@@ -77,26 +78,12 @@ export async function GET(request: NextRequest) {
 
 
 
-        // 2. Get semester-wise stats for students in this department
-        const semesterStats = await query<SemesterStats>(
-            `SELECT 
-                s.current_semester::text as semester,
-                COUNT(DISTINCT s.id) as total_students,
-                COALESCE(
-                    ROUND(
-                        COUNT(CASE WHEN ar.status = 'present' THEN 1 END)::numeric * 100 / 
-                        NULLIF(COUNT(ar.id), 0),
-                        1
-                    ),
-                    0
-                ) as avg_attendance
-            FROM students s
-            LEFT JOIN attendance_records ar ON ar.student_id = s.id
-            WHERE s.department_id = $1
-            GROUP BY s.current_semester
-            ORDER BY s.current_semester`,
-            params
+        // 2. Get total students in this batch
+        const studentCountResult = await queryOne<{ count: string }>(
+            `SELECT COUNT(DISTINCT id)::text as count FROM students WHERE department_id = $1`,
+            [selectedDeptId]
         );
+        const totalStudents = parseInt(studentCountResult?.count || '0');
 
         // 3. Get subject-wise stats using department_id to link subjects
         const subjectStats = await query<SubjectStats>(
@@ -104,11 +91,6 @@ export async function GET(request: NextRequest) {
                 sub.id,
                 sub.name,
                 COALESCE(sub.paper_code, sub.code) as code,
-                COALESCE(
-                    (SELECT string_agg(ss2.semester::text, ', ' ORDER BY ss2.semester)
-                     FROM subject_semesters ss2 WHERE ss2.subject_id = sub.id),
-                    ''
-                ) as semester,
                 COUNT(DISTINCT ss.student_id) as total_students,
                 COALESCE(
                     ROUND(
@@ -135,7 +117,6 @@ export async function GET(request: NextRequest) {
                 s.student_id,
                 s.roll_number::text as roll_number,
                 CONCAT(s.first_name, ' ', s.last_name) as name,
-                s.current_semester::text as semester,
                 COALESCE(
                     ROUND(
                         COUNT(CASE WHEN ar.status = 'present' THEN 1 END)::numeric * 100 / 
@@ -147,7 +128,7 @@ export async function GET(request: NextRequest) {
             FROM students s
             LEFT JOIN attendance_records ar ON ar.student_id = s.id
             WHERE s.department_id = $1
-            GROUP BY s.id, s.student_id, s.roll_number, s.first_name, s.last_name, s.current_semester
+            GROUP BY s.id, s.student_id, s.roll_number, s.first_name, s.last_name
             HAVING COUNT(ar.id) > 0 AND 
                 COALESCE(
                     ROUND(
@@ -169,7 +150,6 @@ export async function GET(request: NextRequest) {
                 s.student_id,
                 s.roll_number::text as roll_number,
                 CONCAT(s.first_name, ' ', s.last_name) as name,
-                s.current_semester::text as semester,
                 COALESCE(
                     ROUND(
                         COUNT(CASE WHEN ar.status = 'present' THEN 1 END)::numeric * 100 / 
@@ -181,7 +161,7 @@ export async function GET(request: NextRequest) {
             FROM students s
             LEFT JOIN attendance_records ar ON ar.student_id = s.id
             WHERE s.department_id = $1
-            GROUP BY s.id, s.student_id, s.roll_number, s.first_name, s.last_name, s.current_semester
+            GROUP BY s.id, s.student_id, s.roll_number, s.first_name, s.last_name
             HAVING COUNT(ar.id) > 0 AND 
                 COALESCE(
                     ROUND(
@@ -197,7 +177,6 @@ export async function GET(request: NextRequest) {
         );
 
         // Calculate totals
-        const totalStudents = semesterStats.reduce((acc, s) => acc + parseInt(s.total_students || '0'), 0);
         const totalSubjects = subjectStats.length;
 
         return NextResponse.json({
@@ -213,16 +192,10 @@ export async function GET(request: NextRequest) {
                 criticalCount: criticalStudents.length,
                 warningCount: warningStudents.length,
             },
-            semesterStats: semesterStats.map(s => ({
-                semester: parseInt(s.semester),
-                totalStudents: parseInt(s.total_students || '0'),
-                avgAttendance: Math.round(parseFloat(s.avg_attendance || '0')),
-            })),
             subjectStats: subjectStats.map(s => ({
                 id: s.id,
                 name: s.name,
                 code: s.code,
-                semester: s.semester,
                 totalStudents: parseInt(s.total_students || '0'),
                 avgAttendance: Math.round(parseFloat(s.avg_attendance || '0')),
             })),
@@ -231,7 +204,6 @@ export async function GET(request: NextRequest) {
                 studentId: s.student_id,
                 rollNumber: s.roll_number,
                 name: s.name,
-                semester: parseInt(s.semester),
                 attendancePercentage: Math.round(parseFloat(s.attendance_pct || '0')),
             })),
             warningStudents: warningStudents.map(s => ({
@@ -239,7 +211,6 @@ export async function GET(request: NextRequest) {
                 studentId: s.student_id,
                 rollNumber: s.roll_number,
                 name: s.name,
-                semester: parseInt(s.semester),
                 attendancePercentage: Math.round(parseFloat(s.attendance_pct || '0')),
             })),
         });

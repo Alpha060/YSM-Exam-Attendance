@@ -15,8 +15,7 @@ interface LectureSummaryRow {
     subject_code: string;
     subject_name: string;
     subject_paper_code: string | null;
-    lecture_number: number;
-    semester: string;
+    lectureNumber: number;
     department_names: string;
     teacher_names: string;
     total_students: string;
@@ -63,7 +62,6 @@ export async function GET(request: NextRequest) {
         const date = searchParams.get('date') || getISTDateStr();
         const subjectId = searchParams.get('subjectId');
         const departmentId = searchParams.get('departmentId');
-        const semester = searchParams.get('semester');
         const detailed = searchParams.get('detailed') === 'true';
 
         // Allow HOD to view as teacher (for My Reports)
@@ -75,31 +73,12 @@ export async function GET(request: NextRequest) {
         const params: (string | number)[] = [date];
 
         // Role-based restrictions
-        if (effectiveRole === 'super_admin') {
-            // HOD: filter by their multiple allowed departments (students.department_id)
-            if (departmentId) {
-                filters.push(`ar.student_id IN (
-                    SELECT id FROM students WHERE department_id = $${params.length + 1}
-                    AND department_id IN (
-                        SELECT department_id FROM users WHERE id = $${params.length + 2}
-                        UNION SELECT department_id FROM user_departments WHERE user_id = $${params.length + 2}
-                    )
-                )`);
-                params.push(departmentId);
-                params.push(userId);
-            } else {
-                filters.push(`ar.student_id IN (
-                    SELECT id FROM students WHERE department_id IN (
-                        SELECT department_id FROM users WHERE id = $${params.length + 1}
-                        UNION SELECT department_id FROM user_departments WHERE user_id = $${params.length + 1}
-                    )
-                )`);
-                params.push(userId);
-            }
-        } else if (effectiveRole === 'teacher') {
-            // Teacher: only show records marked by THEM
+        if (effectiveRole === 'teacher') {
+            // Teacher: only show records marked by THEM in ACTIVE batches only
             filters.push(`ar.teacher_id = $${params.length + 1}`);
             params.push(userId);
+            // Restrict to active batches only
+            filters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN departments d ON s.department_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
             // Also apply department filter if teacher selected one
             if (departmentId) {
                 filters.push(`ar.student_id IN (
@@ -108,22 +87,15 @@ export async function GET(request: NextRequest) {
                 params.push(departmentId);
             }
         } else if (effectiveRole === 'super_admin' && departmentId) {
-            // Super admin with department filter (students.department_id)
+            // Super admin with optional department filter
             filters.push(`ar.student_id IN (
                 SELECT id FROM students WHERE department_id = $${params.length + 1}
             )`);
             params.push(departmentId);
         }
+        // super_admin with no departmentId: no filter — sees all data
 
-        // Semester filter (applies to all roles)
-        if (semester) {
-            filters.push(`ar.student_id IN (
-                SELECT id FROM students WHERE current_semester = $${params.length + 1}
-            )`);
-            params.push(parseInt(semester));
-        }
 
-        // Subject filter
         if (subjectId) {
             params.push(subjectId);
             filters.push(`ar.subject_id = $${params.length}`);
@@ -160,7 +132,7 @@ export async function GET(request: NextRequest) {
                 : 0
         }));
 
-        // Lectures summary: group by subject, lecture_number, semester with aggregated dept names
+        // Lectures summary: group by subject and lecture_number with aggregated dept names
         const lecturesSummaryQuery = `
             SELECT 
                 sub.id as subject_id,
@@ -168,7 +140,6 @@ export async function GET(request: NextRequest) {
                 sub.name as subject_name,
                 sub.paper_code as subject_paper_code,
                 ar.lecture_number,
-                STRING_AGG(DISTINCT s.current_semester::text, ', ' ORDER BY s.current_semester::text) as semester,
                 STRING_AGG(DISTINCT d.name, ', ' ORDER BY d.name) as department_names,
                 STRING_AGG(DISTINCT (t.first_name || ' ' || t.last_name), ', ') as teacher_names,
                 COUNT(*) as total_students,
@@ -192,7 +163,6 @@ export async function GET(request: NextRequest) {
             subjectName: r.subject_name,
             subjectPaperCode: r.subject_paper_code || null,
             lectureNumber: r.lecture_number,
-            semester: r.semester,
             departmentNames: r.department_names || '',
             teacherName: r.teacher_names || '',
             totalStudents: parseInt(r.total_students) || 0,

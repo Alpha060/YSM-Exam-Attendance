@@ -200,6 +200,39 @@ const MIGRATIONS: { name: string; sql: string }[] = [
             END $$;
         `
     },
+    {
+        name: '008_batch_lifecycle',
+        sql: `
+            -- Add lifecycle status to batches (departments)
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'departments' AND column_name = 'status'
+                ) THEN
+                    ALTER TABLE departments ADD COLUMN status VARCHAR(20) DEFAULT 'active'
+                        CHECK (status IN ('upcoming', 'active', 'completed'));
+                    RAISE NOTICE 'Added status column to departments';
+                END IF;
+            END $$;
+
+            -- Index for fast active-batch lookups
+            CREATE INDEX IF NOT EXISTS idx_departments_status ON departments(status);
+
+            -- Add soft-archive columns to teacher_subjects
+            ALTER TABLE teacher_subjects ADD COLUMN IF NOT EXISTS assigned_date DATE DEFAULT CURRENT_DATE;
+            ALTER TABLE teacher_subjects ADD COLUMN IF NOT EXISTS unassigned_date DATE DEFAULT NULL;
+
+            -- Backfill assigned_date from created_at for all existing rows
+            UPDATE teacher_subjects
+            SET assigned_date = created_at::date
+            WHERE assigned_date IS NULL;
+
+            -- Index to speed up "active assignments only" queries
+            CREATE INDEX IF NOT EXISTS idx_teacher_subjects_active
+                ON teacher_subjects(teacher_id) WHERE unassigned_date IS NULL;
+        `
+    },
 ];
 
 export async function runMigrations() {

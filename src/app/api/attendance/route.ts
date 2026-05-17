@@ -97,15 +97,20 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: `Cannot mark attendance on Sunday (Weekend Holiday)` }, { status: 400 });
         }
 
-        // 2. Verify Teacher Assignment ONCE (not per record)
+        // 2. Verify Teacher has an ACTIVE assignment (not archived) and subject is in an active batch
         const assignmentCheck = await query(
-            'SELECT 1 FROM teacher_subjects WHERE teacher_id = $1 AND subject_id = $2',
+            `SELECT 1 FROM teacher_subjects ts
+             JOIN subjects s ON ts.subject_id = s.id
+             JOIN departments d ON s.department_id = d.id
+             WHERE ts.teacher_id = $1 AND ts.subject_id = $2
+             AND ts.unassigned_date IS NULL
+             AND COALESCE(d.status, 'active') = 'active'`,
             [payload.userId, batchSubjectId]
         );
 
         if (assignmentCheck.length === 0) {
-            console.warn(`User ${payload.userId} not assigned to subject ${batchSubjectId}`);
-            return NextResponse.json({ error: 'Not assigned to this subject' }, { status: 403 });
+            console.warn(`User ${payload.userId} not actively assigned to subject ${batchSubjectId} or batch is not active`);
+            return NextResponse.json({ error: 'Not assigned to this subject, or batch is no longer active' }, { status: 403 });
         }
 
         // 3. Auto-detect semester from first student in batch

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
-import { parseCoachingId, extractRollNumber } from '@/lib/parseStudentId';
+import { parseCoachingId, extractRollNumber, matchBatchCode } from '@/lib/parseStudentId';
 
 interface StudentRow {
     id: string;
@@ -116,15 +116,57 @@ export async function POST(request: NextRequest) {
 
         const body = await request.json();
         const studentId = body.studentId?.trim();
-        const coachingId = body.coachingId?.trim()?.toLowerCase();
+        const coachingId = body.coachingId?.trim()?.toUpperCase() || null;
         const firstName = body.firstName?.trim();
         const lastName = body.lastName?.trim() || '';
         const email = body.email?.trim() || null;
-        const departmentId = body.departmentId;
+        let departmentId = body.departmentId;
 
-        if (!studentId || !firstName || !departmentId) {
+        if (!studentId || !firstName) {
             return NextResponse.json(
-                { error: 'Student ID, name, and batch are required' },
+                { error: 'Student ID and name are required' },
+                { status: 400 }
+            );
+        }
+
+        // Auto-detect batch from coaching ID if no explicit departmentId
+        if (!departmentId && coachingId) {
+            const allBatches = await query<{ id: string; code: string; status: string }>(
+                'SELECT id, code, COALESCE(status, \'active\') as status FROM departments'
+            );
+            const batchCodes = allBatches.map(b => b.code);
+            const matchedCode = matchBatchCode(coachingId, batchCodes);
+            if (matchedCode) {
+                const matchedBatch = allBatches.find(b => b.code.toUpperCase() === matchedCode.toUpperCase());
+                if (matchedBatch) {
+                    if (matchedBatch.status === 'completed') {
+                        return NextResponse.json(
+                            { error: `Batch "${matchedCode}" is completed. Cannot add students to a completed batch.` },
+                            { status: 400 }
+                        );
+                    }
+                    departmentId = matchedBatch.id;
+                }
+            }
+        }
+
+        // If departmentId provided directly, verify batch is not completed
+        if (departmentId) {
+            const batch = await queryOne<{ status: string }>(
+                'SELECT COALESCE(status, \'active\') as status FROM departments WHERE id = $1',
+                [departmentId]
+            );
+            if (batch?.status === 'completed') {
+                return NextResponse.json(
+                    { error: 'Cannot add students to a completed batch.' },
+                    { status: 400 }
+                );
+            }
+        }
+
+        if (!departmentId) {
+            return NextResponse.json(
+                { error: 'Could not determine batch. Please select a batch or use a valid coaching ID.' },
                 { status: 400 }
             );
         }
@@ -137,7 +179,7 @@ export async function POST(request: NextRequest) {
                 rollNumber = extracted;
             } else {
                 return NextResponse.json(
-                    { error: 'Invalid coaching ID format. Expected: prefix + year + number (e.g., lks2026001)' },
+                    { error: 'Invalid coaching ID format. Expected: prefix + year + number (e.g., LKS2026001)' },
                     { status: 400 }
                 );
             }
@@ -233,6 +275,20 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Student ID required' }, { status: 400 });
         }
 
+        // Check if updating to a completed batch
+        if (body.departmentId) {
+            const batch = await queryOne<{ status: string }>(
+                'SELECT COALESCE(status, \'active\') as status FROM departments WHERE id = $1',
+                [body.departmentId]
+            );
+            if (batch?.status === 'completed') {
+                return NextResponse.json(
+                    { error: 'Cannot move student to a completed batch.' },
+                    { status: 400 }
+                );
+            }
+        }
+
         const updateFields: string[] = [];
         const params: (string | number | null)[] = [id];
         let paramCount = 1;
@@ -242,7 +298,7 @@ export async function PUT(request: NextRequest) {
             params.push(body.studentId.trim());
         }
         if (body.coachingId !== undefined) {
-            const cid = body.coachingId?.trim()?.toLowerCase() || null;
+            const cid = body.coachingId?.trim()?.toUpperCase() || null;
             updateFields.push(`coaching_id = $${++paramCount}`);
             params.push(cid);
             // Update roll number from coaching ID

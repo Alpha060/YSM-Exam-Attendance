@@ -45,7 +45,6 @@ interface TeacherDetail {
     };
     filters: {
         departments: { id: string; name: string; code: string; deptType?: string }[];
-        semesters: number[];
     };
     summary: {
         totalSessions: number;
@@ -60,7 +59,6 @@ interface TeacherDetail {
         name: string;
         code: string;
         paperCode?: string;
-        semester: number;
         department: string;
         sessions: number;
         workingDays: number;
@@ -90,6 +88,7 @@ export default function TeacherReportPage() {
     const [teachers, setTeachers] = useState<TeacherAttendance[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [batchStatusFilter, setBatchStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
     const [showSearch, setShowSearch] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -136,11 +135,11 @@ export default function TeacherReportPage() {
         if (token && user) {
             fetchTeacherReport(token);
         }
-    }, [selectedDepartmentId, user]);
+    }, [selectedDepartmentId, user, batchStatusFilter]);
 
     useEffect(() => {
         if (selectedTeacherId) {
-            fetchTeacherDetail(selectedTeacherId, popupDeptFilter, undefined, popupDateFrom, popupDateTo);
+            fetchTeacherDetail(selectedTeacherId, popupDeptFilter, popupDateFrom, popupDateTo);
         }
     }, [popupDeptFilter, popupDateFrom, popupDateTo]);
 
@@ -160,8 +159,12 @@ export default function TeacherReportPage() {
         setLoading(true);
         try {
             let url = '/api/reports/teachers';
-            if (selectedDepartmentId) {
-                url += `?departmentId=${selectedDepartmentId}`;
+            const params = new URLSearchParams();
+            if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
+            if (batchStatusFilter) params.append('batchStatus', batchStatusFilter);
+            
+            if (params.toString()) {
+                url += `?${params.toString()}`;
             }
 
             const res = await fetch(url, {
@@ -181,14 +184,13 @@ export default function TeacherReportPage() {
         setLoading(false);
     };
 
-    const fetchTeacherDetail = async (teacherId: string, deptId?: string, semester?: string, dateFrom?: string, dateTo?: string) => {
+    const fetchTeacherDetail = async (teacherId: string, deptId?: string, dateFrom?: string, dateTo?: string) => {
         setLoadingDetail(true);
         try {
             const token = localStorage.getItem('token');
             let url = `/api/reports/teachers/${teacherId}`;
             const params = new URLSearchParams();
             if (deptId) params.append('departmentId', deptId);
-            if (semester) params.append('semester', semester);
             if (dateFrom) params.append('dateFrom', dateFrom);
             if (dateTo) params.append('dateTo', dateTo);
             if (params.toString()) url += '?' + params.toString();
@@ -201,9 +203,17 @@ export default function TeacherReportPage() {
                 return;
             }
             const data = await res.json();
-            setSelectedTeacher(data);
+
+            // Guard: only set if API returned a valid teacher object
+            if (!res.ok || !data.teacher) {
+                console.error('Teacher detail API error:', data.error || 'Unknown error');
+                setSelectedTeacher({ teacher: null as any, filters: { departments: [] }, summary: { totalSessions: 0, workingDays: 0, totalStudents: 0, presentCount: 0, absentCount: 0, averageAttendance: 0 }, subjects: [], monthlyTrend: [], dailyBreakdown: [] });
+            } else {
+                setSelectedTeacher(data);
+            }
         } catch (err) {
             console.error('Error fetching teacher detail:', err);
+            setSelectedTeacher(null);
         }
         setLoadingDetail(false);
     };
@@ -226,7 +236,7 @@ export default function TeacherReportPage() {
 
     // Download Teacher Report Card as PDF
     const downloadTeacherReportCard = () => {
-        if (!selectedTeacher || !user) return;
+        if (!selectedTeacher || !user || !selectedTeacher.teacher) return;
 
         const teacher = selectedTeacher.teacher;
         const summary = selectedTeacher.summary;
@@ -673,11 +683,18 @@ export default function TeacherReportPage() {
 </body>
 </html>`;
 
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(reportHTML);
-            printWindow.document.close();
+        const blob = new Blob([reportHTML], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const printWindow = window.open(blobUrl, '_blank');
+        if (!printWindow) {
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `teacher_report_${teacher.name.replace(/\s+/g, '_')}.html`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     };
 
     const filteredTeachers = teachers.filter(teacher =>
@@ -834,6 +851,25 @@ export default function TeacherReportPage() {
                                 </div>
                             </div>
 
+                            {/* Batch Status Filter */}
+                            {user?.role !== 'teacher' && (
+                                <div className="w-full">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch Status</label>
+                                    <div className="relative">
+                                        <select
+                                            value={batchStatusFilter}
+                                            onChange={(e) => setBatchStatusFilter(e.target.value as 'all' | 'active' | 'completed')}
+                                            className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-indigo-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
+                                        >
+                                            <option value="active">Active & Upcoming</option>
+                                            <option value="completed">Completed Only</option>
+                                            <option value="all">All Batches</option>
+                                        </select>
+                                        <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Department Filter */}
                             {user?.role !== 'teacher' ? (
                                 <div className="w-full">
@@ -844,10 +880,15 @@ export default function TeacherReportPage() {
                                             onChange={(e) => setSelectedDepartmentId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-indigo-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
-                                            <option value="">All Batches</option>
-                                            {departments.map((dept) => (
-                                                <option key={dept.id} value={dept.id}>{dept.name}</option>
-                                            ))}
+                                            <option value="">All {batchStatusFilter === 'completed' ? 'Completed ' : batchStatusFilter === 'active' ? 'Active ' : ''}Batches</option>
+                                            {departments
+                                                .filter(d => batchStatusFilter === 'all' || 
+                                                    (batchStatusFilter === 'active' && d.status !== 'completed') || 
+                                                    (batchStatusFilter === 'completed' && d.status === 'completed'))
+                                                .map((dept) => (
+                                                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                                                ))
+                                            }
                                         </select>
                                         <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
                                     </div>
@@ -864,6 +905,7 @@ export default function TeacherReportPage() {
                                     onClick={() => {
                                         setSelectedDepartmentId('');
                                         setSearchTerm('');
+                                        setBatchStatusFilter('active');
                                     }}
                                 >
                                     Reset Filters
@@ -1039,6 +1081,14 @@ export default function TeacherReportPage() {
                                         <div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full mb-4"></div>
                                         <p className="text-sm text-gray-500">Loading details...</p>
                                     </div>
+                                ) : selectedTeacher && !selectedTeacher.teacher ? (
+                                    <div className="flex flex-col items-center justify-center py-12">
+                                        <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                                            <AlertCircle className="w-8 h-8 text-red-400" />
+                                        </div>
+                                        <h3 className="text-base font-semibold text-gray-700 mb-1">Failed to Load Teacher Data</h3>
+                                        <p className="text-sm text-gray-400">The teacher details could not be retrieved. Please try again.</p>
+                                    </div>
                                 ) : selectedTeacher && (
                                     <div className={`space-y-8 relative transition-opacity duration-300 ${loadingDetail ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
                                         {loadingDetail && (
@@ -1098,7 +1148,7 @@ export default function TeacherReportPage() {
                                             </div>
                                         </div>
 
-                                        {/* Filters for Detail (Department/Semester/Date) */}
+                                        {/* Filters for Detail (Department / Date) */}
                                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                                             <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Filter Details</div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -1148,6 +1198,7 @@ export default function TeacherReportPage() {
                                                         <thead className="bg-gray-50 text-gray-500 font-semibold border-b">
                                                             <tr>
                                                                 <th className="px-4 py-3">Subject</th>
+                                                                <th className="px-4 py-3">Batch</th>
                                                                 <th className="px-4 py-3 text-center">No. of Lectures</th>
                                                                 <th className="px-4 py-3 text-center">Attendance</th>
                                                             </tr>
@@ -1157,7 +1208,12 @@ export default function TeacherReportPage() {
                                                                 <tr key={`${subj.id}-${idx}`} className="bg-white hover:bg-gray-50/50">
                                                                     <td className="px-4 py-3">
                                                                         <div className="font-medium text-gray-900">{subj.name}</div>
-                                                                        <div className="text-xs text-gray-500">Sem {subj.semester} • {subj.paperCode || subj.code}</div>
+                                                                        <div className="text-xs text-gray-500">{subj.paperCode || subj.code}</div>
+                                                                    </td>
+                                                                    <td className="px-4 py-3">
+                                                                        <span className="px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded border border-purple-100">
+                                                                            {subj.department}
+                                                                        </span>
                                                                     </td>
                                                                     <td className="px-4 py-3 text-center text-gray-600">{subj.sessions}</td>
                                                                     <td className="px-4 py-3 text-center">

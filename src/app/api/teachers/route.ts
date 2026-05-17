@@ -52,7 +52,24 @@ export async function GET(request: NextRequest) {
                     FROM teacher_subjects ts
                     JOIN subjects s ON ts.subject_id = s.id
                     WHERE ts.teacher_id = u.id
+                    AND ts.unassigned_date IS NULL
                 ) as subjects,
+                (
+                    SELECT COALESCE(json_agg(json_build_object(
+                        'assignmentId', ts.id,
+                        'subjectId', s.id,
+                        'code', s.code, 
+                        'paperCode', s.paper_code,
+                        'name', s.name,
+                        'departmentId', s.department_id,
+                        'assignedDate', ts.assigned_date,
+                        'unassignedDate', ts.unassigned_date
+                    )), '[]'::json)
+                    FROM teacher_subjects ts
+                    JOIN subjects s ON ts.subject_id = s.id
+                    WHERE ts.teacher_id = u.id
+                    AND ts.unassigned_date IS NOT NULL
+                ) as archived_subjects,
                 (
                     SELECT COALESCE(json_agg(json_build_object(
                         'id', dept.id,

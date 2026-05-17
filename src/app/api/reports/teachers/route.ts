@@ -33,34 +33,41 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const departmentId = searchParams.get('departmentId');
 
+        // Teachers are ALWAYS restricted to active batches — override any param sent
+        const batchStatus = role === 'teacher' ? 'active' : (searchParams.get('batchStatus') || 'all');
+
         // Build role-based filter
         const filters: string[] = [];
         const params: string[] = [];
 
+        // Batch Status Filter
+        if (batchStatus === 'active') {
+            filters.push(`EXISTS (
+                SELECT 1 FROM teacher_subjects ts_filt 
+                JOIN subjects s_filt ON ts_filt.subject_id = s_filt.id 
+                JOIN departments d_filt ON s_filt.department_id = d_filt.id 
+                WHERE ts_filt.teacher_id = u.id AND (d_filt.status IS NULL OR d_filt.status = 'active' OR d_filt.status = 'upcoming')
+            )`);
+        } else if (batchStatus === 'completed') {
+            filters.push(`EXISTS (
+                SELECT 1 FROM teacher_subjects ts_filt 
+                JOIN subjects s_filt ON ts_filt.subject_id = s_filt.id 
+                JOIN departments d_filt ON s_filt.department_id = d_filt.id 
+                WHERE ts_filt.teacher_id = u.id AND d_filt.status = 'completed'
+            )`);
+        }
+
         if (role === 'super_admin') {
-            // HOD: show teachers whose primary OR secondary departments overlap with HOD's departments
-            params.push(userId);
-            let hodDeptSql = `
-                SELECT department_id FROM users WHERE id = $${params.length}
-                UNION
-                SELECT department_id FROM user_departments WHERE user_id = $${params.length}
-            `;
+            // Super admin: see all teachers, optionally filter by department
             if (departmentId) {
                 params.push(departmentId);
-                // Teacher's primary dept OR any linked dept matches the selected dept (which must be in HOD's authorized depts)
-                filters.push(`(u.department_id = $${params.length} OR u.id IN (SELECT user_id FROM user_departments WHERE department_id = $${params.length})) AND $${params.length} IN (${hodDeptSql})`);
-            } else {
-                // Teacher's primary dept OR any linked dept is in HOD's authorized depts
-                filters.push(`(u.department_id IN (${hodDeptSql}) OR u.id IN (SELECT user_id FROM user_departments WHERE department_id IN (${hodDeptSql})))`);
+                filters.push(`(u.department_id = $${params.length} OR u.id IN (SELECT user_id FROM user_departments WHERE department_id = $${params.length}))`);
             }
+            // No departmentId: super_admin sees ALL teachers
         } else if (role === 'teacher') {
             // Teacher: only see their own stats
             params.push(userId);
             filters.push(`u.id = $${params.length}`);
-        } else if (role === 'super_admin' && departmentId) {
-            // Super admin with department filter
-            params.push(departmentId);
-            filters.push(`u.department_id = $${params.length}`);
         }
 
         const filterClause = filters.length > 0 ? 'AND ' + filters.join(' AND ') : '';
@@ -73,16 +80,40 @@ export async function GET(request: NextRequest) {
                 u.last_name,
                 u.email,
                 (
-                    SELECT STRING_AGG(DISTINCT ud_d.code, ', ' ORDER BY ud_d.code)
-                    FROM departments ud_d
-                    WHERE ud_d.id = u.department_id
-                       OR ud_d.id IN (SELECT department_id FROM user_departments ud WHERE ud.user_id = u.id)
+                    SELECT STRING_AGG(dept_code, ', ' ORDER BY dept_code)
+                    FROM (
+                        SELECT DISTINCT ud_d.code AS dept_code
+                        FROM departments ud_d
+                        WHERE ud_d.id = u.department_id
+                           OR ud_d.id IN (SELECT department_id FROM user_departments ud WHERE ud.user_id = u.id)
+                    ) dept_codes
                 ) as department_name,
                 COALESCE(
-                    STRING_AGG(DISTINCT s.name, ', ' ORDER BY s.name),
+                    (
+                        SELECT STRING_AGG(sn, ', ' ORDER BY sn)
+                        FROM (
+                            SELECT DISTINCT s2.name AS sn
+                            FROM teacher_subjects ts2
+                            JOIN subjects s2 ON s2.id = ts2.subject_id
+                            JOIN departments d2 ON d2.id = s2.department_id
+                            WHERE ts2.teacher_id = u.id
+                            ${role === 'teacher' ? "AND COALESCE(d2.status, 'active') = 'active'" : ''}
+                        ) sub_names
+                    ),
                     ''
                 ) as subject_names,
-                COUNT(DISTINCT ar.date || '-' || COALESCE(ar.semester::text, '0') || '-' || ar.lecture_number) as total_sessions,
+                ${role === 'teacher'
+                    ? `COUNT(DISTINCT CASE WHEN COALESCE(sd.status, 'active') = 'active' THEN ar.date || '-' || ar.subject_id::text || '-' || ar.lecture_number END) as total_sessions,
+                COUNT(DISTINCT CASE WHEN COALESCE(sd.status, 'active') = 'active' THEN ar.date END) as working_days,
+                COALESCE(
+                    ROUND(
+                        COUNT(CASE WHEN ar.status = 'present' AND COALESCE(sd.status, 'active') = 'active' THEN 1 END)::numeric * 100 / 
+                        NULLIF(COUNT(CASE WHEN COALESCE(sd.status, 'active') = 'active' THEN ar.id END), 0),
+                        1
+                    ),
+                    0
+                ) as avg_attendance`
+                    : `COUNT(DISTINCT ar.date || '-' || ar.subject_id::text || '-' || ar.lecture_number) as total_sessions,
                 COUNT(DISTINCT ar.date) as working_days,
                 COALESCE(
                     ROUND(
@@ -91,14 +122,14 @@ export async function GET(request: NextRequest) {
                         1
                     ),
                     0
-                ) as avg_attendance
+                ) as avg_attendance`}
              FROM users u
-             LEFT JOIN departments d ON d.id = u.department_id
              LEFT JOIN teacher_subjects ts ON ts.teacher_id = u.id
              LEFT JOIN subjects s ON s.id = ts.subject_id
+             LEFT JOIN departments sd ON sd.id = s.department_id
              LEFT JOIN attendance_records ar ON ar.subject_id = ts.subject_id AND ar.teacher_id = u.id
              WHERE u.role IN ('teacher') ${filterClause}
-             GROUP BY u.id, u.first_name, u.last_name, u.email, d.name
+             GROUP BY u.id, u.first_name, u.last_name, u.email
              ORDER BY u.first_name ASC, u.last_name ASC`,
             params
         );

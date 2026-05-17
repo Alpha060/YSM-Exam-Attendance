@@ -48,6 +48,7 @@ interface Teacher {
     department_code?: string;
     departments?: DepartmentInfo[];
     subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; departmentId?: string; }[];
+    archived_subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; departmentId?: string; assignedDate: string; unassignedDate: string; }[];
 }
 
 interface Department {
@@ -404,8 +405,9 @@ export default function TeachersPage() {
             if (currentTeacher?.subjects) {
                 for (const sub of currentTeacher.subjects) {
                     if (!targetSubjectIds.has(sub.subjectId)) {
+                        // PATCH = soft-archive: stamps unassigned_date, preserves report history
                         await fetch(`/api/teacher-subjects?id=${sub.assignmentId}`, {
-                            method: 'DELETE',
+                            method: 'PATCH',
                             headers: { Authorization: `Bearer ${token}` }
                         });
                     }
@@ -1020,9 +1022,8 @@ export default function TeachersPage() {
 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
                                         {departments
-                                            // For HOD: filter to only show their department when adding,
-                                            // or teacher's departments + their own when editing
-                                            .filter(() => true) // Admin sees all
+                                            // Admin sees all active batches
+                                            .filter(d => d.status !== 'completed')
                                             .map(dept => {
                                                 const isOtherDept = false;
 
@@ -1095,6 +1096,50 @@ export default function TeachersPage() {
                                                     </div>
                                                 </label>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Assignment History (Archived Subjects) */}
+                                {selectedTeacherId && teachers.find(t => t.id === selectedTeacherId)?.archived_subjects && teachers.find(t => t.id === selectedTeacherId)!.archived_subjects!.length > 0 && (
+                                    <div className="space-y-3 pt-4 border-t border-gray-100">
+                                        <Label className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                                            Assignment History
+                                            <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Archived</span>
+                                        </Label>
+                                        <p className="text-xs text-gray-500 -mt-1">Past subject assignments for this teacher that are no longer active.</p>
+                                        
+                                        <div className="max-h-48 overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                                            {teachers.find(t => t.id === selectedTeacherId)!.archived_subjects!.map((subject) => {
+                                                const assignedDate = new Date(subject.assignedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                                                const unassignedDate = new Date(subject.unassignedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                                                const dept = departments.find(d => d.id === subject.departmentId);
+                                                
+                                                return (
+                                                    <div
+                                                        key={subject.assignmentId}
+                                                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-gray-50/80 border border-gray-100"
+                                                    >
+                                                        <div>
+                                                            <div className="text-sm font-medium text-gray-700">
+                                                                {subject.name}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500 flex items-center gap-2 mt-0.5">
+                                                                <span className="font-medium text-gray-400">{subject.paperCode || subject.code}</span>
+                                                                {dept && (
+                                                                    <>
+                                                                        <span className="text-gray-300">•</span>
+                                                                        <span className="text-gray-600 bg-white px-1.5 py-0.5 rounded shadow-sm border border-gray-100">{dept.name}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-[10px] font-medium text-gray-500 mt-2 sm:mt-0 bg-white px-2.5 py-1 rounded-md border border-gray-200 shadow-sm whitespace-nowrap">
+                                                            {assignedDate} <span className="text-gray-300 mx-1">→</span> {unassignedDate}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 )}

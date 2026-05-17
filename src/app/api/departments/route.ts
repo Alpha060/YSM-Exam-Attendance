@@ -6,6 +6,7 @@ interface DepartmentRow {
     id: string;
     name: string;
     code: string;
+    status: string;
     created_at: Date;
 }
 
@@ -26,16 +27,17 @@ export async function GET(request: NextRequest) {
         let departments;
         if (payload.role === 'super_admin') {
             departments = await query<DepartmentRow>(
-                `SELECT d.id, d.name, d.code, d.created_at
+                `SELECT d.id, d.name, d.code, COALESCE(d.status, 'active') as status, d.created_at
                  FROM departments d
                  ORDER BY d.name ASC`
             );
         } else {
-            // Teachers see batches they are assigned to
+            // Teachers only see ACTIVE batches they are assigned to
             departments = await query<DepartmentRow>(
-                `SELECT d.id, d.name, d.code, d.created_at
+                `SELECT d.id, d.name, d.code, COALESCE(d.status, 'active') as status, d.created_at
                  FROM departments d
-                 WHERE d.id IN (
+                 WHERE COALESCE(d.status, 'active') = 'active'
+                 AND d.id IN (
                      SELECT department_id FROM user_departments WHERE user_id = $1
                      UNION
                      SELECT department_id FROM users WHERE id = $1
@@ -126,10 +128,15 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { id, name, code } = await request.json();
+        const { id, name, code, status } = await request.json();
 
         if (!id) {
             return NextResponse.json({ error: 'Batch ID required' }, { status: 400 });
+        }
+
+        const validStatuses = ['upcoming', 'active', 'completed'];
+        if (status && !validStatuses.includes(status)) {
+            return NextResponse.json({ error: 'Invalid status value' }, { status: 400 });
         }
 
         const updateFields: string[] = [];
@@ -138,6 +145,7 @@ export async function PUT(request: NextRequest) {
 
         if (name) { updateFields.push(`name = $${++paramCount}`); params.push(name); }
         if (code) { updateFields.push(`code = $${++paramCount}`); params.push(code.toUpperCase()); }
+        if (status) { updateFields.push(`status = $${++paramCount}`); params.push(status); }
 
         if (updateFields.length === 0) {
             return NextResponse.json({ message: 'No fields to update' });
@@ -147,6 +155,19 @@ export async function PUT(request: NextRequest) {
             `UPDATE departments SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
             params
         );
+
+        // When a batch is completed, soft-archive ALL active teacher assignments for subjects in that batch
+        if (status === 'completed') {
+            await query(
+                `UPDATE teacher_subjects
+                 SET unassigned_date = CURRENT_DATE
+                 WHERE unassigned_date IS NULL
+                 AND subject_id IN (
+                     SELECT id FROM subjects WHERE department_id = $1
+                 )`,
+                [id]
+            );
+        }
 
         return NextResponse.json({ message: 'Batch updated successfully' });
     } catch (error: unknown) {

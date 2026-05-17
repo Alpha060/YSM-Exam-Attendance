@@ -22,16 +22,18 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        // Single query: Get primary department + all additional departments
+        // Single query: Get primary department + all additional departments (active only)
         const departments = await query<DepartmentRow>(
             `SELECT d.id, d.name, d.code
              FROM departments d
              WHERE d.id = (SELECT department_id FROM users WHERE id = $1)
+             AND COALESCE(d.status, 'active') = 'active'
              UNION
              SELECT d.id, d.name, d.code
              FROM departments d
              JOIN user_departments ud ON d.id = ud.department_id
-             WHERE ud.user_id = $1`,
+             WHERE ud.user_id = $1
+             AND COALESCE(d.status, 'active') = 'active'`,
             [payload.userId]
         );
 

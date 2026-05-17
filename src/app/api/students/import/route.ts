@@ -24,11 +24,11 @@ export async function POST(req: Request) {
             errors: [] as { row: number, name: string, error: string }[]
         };
 
-        // Cache batches (departments) for validation
+        // Cache batches (departments) for validation — include status
         const deptResult = await client.query(
-            'SELECT id, code, name FROM departments'
+            "SELECT id, code, name, COALESCE(status, 'active') as status FROM departments"
         );
-        const departmentMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id, name: d.name }]));
+        const departmentMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id, name: d.name, status: d.status }]));
 
         // Get current academic year
         const now = new Date();
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
             .map((s: any) => s.student_id.toUpperCase());
         const allCoachingIds = students
             .filter((s: any) => s.coaching_id)
-            .map((s: any) => s.coaching_id.toLowerCase());
+            .map((s: any) => s.coaching_id.toUpperCase());
 
         const existingResult = await client.query(
             `SELECT id, student_id, coaching_id, email, first_name, last_name, roll_number, department_id FROM students 
@@ -80,25 +80,48 @@ export async function POST(req: Request) {
 
                 // 2. Find batch/department
                 let deptId: string | undefined;
-                const coachingId = student.coaching_id?.trim()?.toLowerCase() || null;
+                let deptStatus: string | undefined;
+                const coachingId = student.coaching_id?.trim()?.toUpperCase() || null;
 
                 // Try to find batch from batch_code or department_code column
                 if (student.batch_code) {
-                    deptId = departmentMap.get(student.batch_code.toUpperCase())?.id;
+                    const entry = departmentMap.get(student.batch_code.toUpperCase());
+                    deptId = entry?.id;
+                    deptStatus = entry?.status;
                 } else if (student.department_code) {
-                    deptId = departmentMap.get(student.department_code.toUpperCase())?.id;
+                    const entry = departmentMap.get(student.department_code.toUpperCase());
+                    deptId = entry?.id;
+                    deptStatus = entry?.status;
                 }
 
-                // If coaching ID provided, try to derive batch from prefix
+                // If coaching ID provided, try to derive batch from prefix (longest match)
                 if (!deptId && coachingId) {
                     const parsed = parseCoachingId(coachingId);
                     if (parsed.isValid && parsed.batchPrefix) {
-                        deptId = departmentMap.get(parsed.batchPrefix.toUpperCase())?.id;
+                        // Try longest prefix match
+                        const allCodes = Array.from(departmentMap.keys());
+                        const sortedCodes = allCodes.sort((a, b) => b.length - a.length);
+                        for (const code of sortedCodes) {
+                            if (coachingId.startsWith(code)) {
+                                const rest = coachingId.slice(code.length);
+                                if (/^20[2-9]\d\d{1,4}$/.test(rest)) {
+                                    const entry = departmentMap.get(code);
+                                    deptId = entry?.id;
+                                    deptStatus = entry?.status;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
 
                 if (!deptId) {
                     throw new Error(`Could not find batch for: ${student.batch_code || student.department_code || 'unknown'}. Please provide a valid batch_code.`);
+                }
+
+                // Block completed batches
+                if (deptStatus === 'completed') {
+                    throw new Error(`Batch is completed. Cannot import students into a completed batch.`);
                 }
 
                 // 3. Derive roll number from coaching ID

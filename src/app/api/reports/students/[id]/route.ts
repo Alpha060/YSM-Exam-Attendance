@@ -10,7 +10,6 @@ interface StudentDetail {
     last_name: string;
     email: string;
     department_name: string;
-    current_semester: number;
 }
 
 interface SubjectStats {
@@ -68,7 +67,7 @@ export async function GET(
         // Get student basic info
         const studentInfo = await query<StudentDetail>(
             `SELECT s.id, s.student_id, s.roll_number, s.first_name, s.last_name, s.email, 
-                    s.current_semester, d.name as department_name
+                    d.name as department_name
              FROM students s
              LEFT JOIN departments d ON d.id = s.department_id
              WHERE s.id = $1`,
@@ -213,6 +212,34 @@ export async function GET(
 
 
 
+        // Get daily breakdown (individual attendance records)
+        let dailyQuery = `SELECT
+                ar.date::text as date,
+                s.code as subject_code,
+                s.name as subject_name,
+                ar.lecture_number,
+                ar.status
+             FROM attendance_records ar
+             JOIN subjects s ON s.id = ar.subject_id
+             WHERE ar.student_id = $1
+               AND ar.subject_id IN (SELECT subject_id FROM student_subjects WHERE student_id = $1)`;
+
+        if (effectiveRole === 'teacher') {
+            dailyQuery += ` AND ${teacherSubjectFilter}`;
+        }
+
+        if (startDate && endDate) {
+            dailyQuery += ` AND ar.date >= $2 AND ar.date <= $3`;
+        } else if (startDate) {
+            dailyQuery += ` AND ar.date >= $2`;
+        } else if (endDate) {
+            dailyQuery += ` AND ar.date <= $2`;
+        }
+
+        dailyQuery += ` ORDER BY ar.date DESC, s.name ASC, ar.lecture_number ASC LIMIT 100`;
+
+        const dailyRecords = await query<DailyRecord>(dailyQuery, otherStatsParams);
+
         const student = studentInfo[0];
         const overall = overallStats[0] || { total_classes: '0', attended: '0', attendance_pct: '0' };
 
@@ -224,7 +251,6 @@ export async function GET(
                 name: `${student.first_name} ${student.last_name}`,
                 email: student.email || 'N/A',
                 department: student.department_name || 'N/A',
-                semester: student.current_semester
             },
             summary: {
                 totalClasses: parseInt(overall.total_classes) || 0,
@@ -245,6 +271,13 @@ export async function GET(
                 totalClasses: parseInt(m.total_classes) || 0,
                 attended: parseInt(m.attended) || 0,
                 attendance: Math.round(parseFloat(m.attendance_pct) || 0)
+            })),
+            dailyBreakdown: dailyRecords.map(r => ({
+                date: r.date,
+                subjectCode: r.subject_code,
+                subjectName: r.subject_name,
+                lectureNumber: r.lecture_number,
+                status: r.status
             })),
 
             // Include the date range in response for reference

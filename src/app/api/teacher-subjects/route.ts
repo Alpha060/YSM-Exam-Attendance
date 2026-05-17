@@ -12,6 +12,8 @@ interface TeacherSubjectRow {
     subject_paper_code: string | null;
     subject_name: string;
     academic_year: string;
+    assigned_date: string | null;
+    unassigned_date: string | null;
     created_at: string;
 }
 
@@ -33,13 +35,16 @@ export async function GET(request: NextRequest) {
         const teacherId = searchParams.get('teacherId');
         const subjectId = searchParams.get('subjectId');
         const academicYear = searchParams.get('academicYear');
+        const includeArchived = searchParams.get('includeArchived') === 'true';
 
         let queryStr = `
-             SELECT ts.id, ts.teacher_id, ts.subject_id, ts.academic_year, ts.created_at, 
+             SELECT ts.id, ts.teacher_id, ts.subject_id, ts.academic_year,
+                    ts.assigned_date, ts.unassigned_date, ts.created_at, 
                     u.first_name as teacher_first_name, u.last_name as teacher_last_name,
                     s.code as subject_code, s.paper_code as subject_paper_code, s.name as subject_name,
                     s.department_id,
-                    d.name as department_name, d.code as department_code
+                    d.name as department_name, d.code as department_code,
+                    COALESCE(d.status, 'active') as department_status
              FROM teacher_subjects ts
              JOIN users u ON u.id = ts.teacher_id
              JOIN subjects s ON s.id = ts.subject_id
@@ -47,6 +52,11 @@ export async function GET(request: NextRequest) {
             WHERE 1=1
         `;
         const params: string[] = [];
+
+        // By default only return ACTIVE assignments (not archived)
+        if (!includeArchived) {
+            queryStr += ` AND ts.unassigned_date IS NULL`;
+        }
 
         if (teacherId) {
             params.push(teacherId);
@@ -65,7 +75,7 @@ export async function GET(request: NextRequest) {
 
         queryStr += ' ORDER BY ts.created_at DESC';
 
-        const assignments = await query<TeacherSubjectRow & { department_id: string; department_name: string; department_code: string }>(queryStr, params);
+        const assignments = await query<TeacherSubjectRow & { department_id: string; department_name: string; department_code: string; department_status: string }>(queryStr, params);
 
         return NextResponse.json({
             assignments: assignments.map(a => ({
@@ -79,7 +89,11 @@ export async function GET(request: NextRequest) {
                 departmentId: a.department_id,
                 departmentName: a.department_name,
                 departmentCode: a.department_code,
+                departmentStatus: a.department_status,
                 academicYear: a.academic_year,
+                assignedDate: a.assigned_date,
+                unassignedDate: a.unassigned_date,
+                isActive: a.unassigned_date === null,
                 createdAt: a.created_at
             }))
         });
@@ -134,6 +148,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No subjects found' }, { status: 404 });
         }
 
+        // Check if any subject is in a completed batch
+        const batchCheck = await query<{ status: string }>(
+            `SELECT COALESCE(d.status, 'active') as status FROM subjects s
+             JOIN departments d ON s.department_id = d.id
+             WHERE s.id = ANY($1::uuid[])`,
+            [subjectIds]
+        );
+        
+        if (batchCheck.some(b => b.status === 'completed')) {
+            return NextResponse.json(
+                { error: 'Cannot assign teachers to subjects in a completed batch' },
+                { status: 400 }
+            );
+        }
+
         // Assign teacher to all subject IDs
         let assignedCount = 0;
         for (const sId of subjectIds) {
@@ -157,7 +186,45 @@ export async function POST(request: NextRequest) {
     }
 }
 
-// DELETE - Remove teacher-subject assignment
+// PATCH - Soft-archive a teacher-subject assignment (preserves history)
+export async function PATCH(request: NextRequest) {
+    try {
+        const authHeader = request.headers.get('authorization');
+        if (!authHeader?.startsWith('Bearer ')) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const token = authHeader.split(' ')[1];
+        const payload = verifyToken(token);
+        if (!payload) {
+            return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+        }
+
+        if (payload.role !== 'super_admin') {
+            return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+        }
+
+        const { searchParams } = new URL(request.url);
+        const id = searchParams.get('id');
+
+        if (!id) {
+            return NextResponse.json({ error: 'Assignment ID required' }, { status: 400 });
+        }
+
+        // Soft-archive: stamp unassigned_date instead of deleting
+        await query(
+            'UPDATE teacher_subjects SET unassigned_date = CURRENT_DATE WHERE id = $1 AND unassigned_date IS NULL',
+            [id]
+        );
+
+        return NextResponse.json({ message: 'Assignment archived successfully' });
+    } catch (error) {
+        console.error('Archive assignment error:', error);
+        return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    }
+}
+
+// DELETE - Hard delete (only for assignments with NO attendance records — i.e. mistakes)
 export async function DELETE(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -182,6 +249,31 @@ export async function DELETE(request: NextRequest) {
             return NextResponse.json({ error: 'Assignment ID required' }, { status: 400 });
         }
 
+        // Only hard-delete if no attendance records exist for this assignment
+        const ts = await query<{ teacher_id: string; subject_id: string }>(
+            'SELECT teacher_id, subject_id FROM teacher_subjects WHERE id = $1',
+            [id]
+        );
+
+        if (ts.length === 0) {
+            return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+        }
+
+        const hasAttendance = await query<{ count: string }>(
+            'SELECT COUNT(*) as count FROM attendance_records WHERE teacher_id = $1 AND subject_id = $2',
+            [ts[0].teacher_id, ts[0].subject_id]
+        );
+
+        if (parseInt(hasAttendance[0]?.count || '0') > 0) {
+            // Has attendance data — soft-archive instead of delete to preserve history
+            await query(
+                'UPDATE teacher_subjects SET unassigned_date = CURRENT_DATE WHERE id = $1',
+                [id]
+            );
+            return NextResponse.json({ message: 'Assignment archived (has attendance records)' });
+        }
+
+        // Safe to hard delete — no attendance data exists
         await query('DELETE FROM teacher_subjects WHERE id = $1', [id]);
 
         return NextResponse.json({ message: 'Assignment removed successfully' });

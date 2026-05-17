@@ -31,7 +31,6 @@ interface Subject {
     id: string;
     code: string;
     name: string;
-    semester: number;
 }
 
 interface AttendanceRecord {
@@ -47,7 +46,6 @@ interface LectureSummary {
     subjectName: string;
     subjectPaperCode: string | null;
     lectureNumber: number;
-    semester: string;
     departmentNames: string;
     teacherName: string;
     totalStudents: number;
@@ -92,7 +90,7 @@ function DailyReportContent() {
         // Fetch departments for super_admin or teacher with multiple depts
         if (parsedUser.role === 'super_admin') {
             fetchDepartments(token);
-        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'super_admin') {
+        } else if (parsedUser.role === 'teacher') {
             fetchTeacherDepartments(token, parsedUser.id);
         }
     }, [router]);
@@ -461,12 +459,18 @@ function DailyReportContent() {
     </div>
 </body>
 </html>`;
-                const printWindow = window.open('', '_blank');
-                if (printWindow) {
-                    printWindow.document.write(printContent);
-                    printWindow.document.close();
-                    printWindow.onload = () => { printWindow.print(); };
+                const blob = new Blob([printContent], { type: 'text/html;charset=utf-8' });
+                const blobUrl = URL.createObjectURL(blob);
+                const printWindow = window.open(blobUrl, '_blank');
+                if (!printWindow) {
+                    const link = document.createElement('a');
+                    link.href = blobUrl;
+                    link.download = 'daily_attendance_report.html';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
                 }
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
             }
         } catch (err) {
             console.error('Error exporting report:', err);

@@ -52,7 +52,6 @@ interface StudentDetail {
         name: string;
         email: string;
         department: string;
-        semester: number;
     };
     summary: {
         totalClasses: number;
@@ -98,6 +97,7 @@ function StudentReportContent() {
     const [students, setStudents] = useState<StudentAttendance[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [batchStatusFilter, setBatchStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
 
 
     const [showSearch, setShowSearch] = useState(false);
@@ -138,7 +138,7 @@ function StudentReportContent() {
 
         if (parsedUser.role === 'super_admin') {
             fetchDepartments(token);
-        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'super_admin') {
+        } else if (parsedUser.role === 'teacher') {
             fetchTeacherDepartments(token, parsedUser.id);
         }
     }, [router]);
@@ -162,7 +162,7 @@ function StudentReportContent() {
         if (token && user) {
             fetchStudentReport(token);
         }
-    }, [selectedDepartmentId, selectedSubjectsStr, user, startDate, endDate]);
+    }, [selectedDepartmentId, selectedSubjectsStr, user, startDate, endDate, batchStatusFilter]);
 
     // Fetch subjects when batch changes
     useEffect(() => {
@@ -261,6 +261,7 @@ function StudentReportContent() {
             let url = '/api/reports/students';
             const params = new URLSearchParams();
             if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
+            if (batchStatusFilter) params.append('batchStatus', batchStatusFilter);
             if (startDate) params.append('startDate', startDate);
             if (endDate) params.append('endDate', endDate);
             if (viewParam) params.append('view', viewParam);
@@ -732,7 +733,7 @@ function StudentReportContent() {
                 </div>
             </div>
 
-            <div class="section-title">Subject-wise Breakdown</div>
+            <div class="section-header">Subject-wise Breakdown</div>
             <table>
                 <thead>
                     <tr>
@@ -788,11 +789,19 @@ function StudentReportContent() {
 </body>
 </html>`;
 
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(reportHTML);
-            printWindow.document.close();
+        const blob = new Blob([reportHTML], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const printWindow = window.open(blobUrl, '_blank');
+        if (!printWindow) {
+            // Fallback: create a temp link and click it
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = `student_report_${student.name.replace(/\s+/g, '_')}.html`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     };
 
     const filteredStudents = students.filter(student => {
@@ -973,12 +982,18 @@ function StudentReportContent() {
     </table>
 </body>
 </html>`;
-            const printWindow = window.open('', '_blank');
-            if (printWindow) {
-                printWindow.document.write(printContent);
-                printWindow.document.close();
-                printWindow.onload = () => { printWindow.print(); };
+            const blob = new Blob([printContent], { type: 'text/html;charset=utf-8' });
+            const blobUrl = URL.createObjectURL(blob);
+            const printWindow = window.open(blobUrl, '_blank');
+            if (!printWindow) {
+                const link = document.createElement('a');
+                link.href = blobUrl;
+                link.download = 'student_attendance_report.html';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
             }
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
         }
     };
 
@@ -1099,6 +1114,27 @@ function StudentReportContent() {
                                 </div>
                             </div>
 
+                            {/* Batch Status Filter - Super Admin only */}
+                            {user?.role === 'super_admin' && (
+                                <div className="w-full">
+                                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch Status</label>
+                                    <div className="relative">
+                                        <select
+                                            value={batchStatusFilter}
+                                            onChange={(e) => setBatchStatusFilter(e.target.value as 'all' | 'active' | 'completed')}
+                                            className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-purple-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
+                                        >
+                                            <option value="active">Active & Upcoming</option>
+                                            <option value="completed">Completed Only</option>
+                                            <option value="all">All Batches</option>
+                                        </select>
+                                        <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-3 pointer-events-none" />
+                                    </div>
+                                </div>
+                            )}
+
+
+
                             {/* Department Filter */}
                             {(user?.role === 'super_admin' || departments.length > 1) && (
                                 <div className="w-full">
@@ -1109,8 +1145,12 @@ function StudentReportContent() {
                                             onChange={(e) => setSelectedDepartmentId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-purple-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
-                                            <option value="">All Batches</option>
-                                            {departments.map((dept) => (
+                                            <option value="">All {batchStatusFilter === 'completed' ? 'Completed ' : batchStatusFilter === 'active' ? 'Active ' : ''}Batches</option>
+                                            {departments
+                                                .filter(d => batchStatusFilter === 'all' || 
+                                                    (batchStatusFilter === 'active' && d.status !== 'completed') || 
+                                                    (batchStatusFilter === 'completed' && d.status === 'completed'))
+                                                .map((dept) => (
                                                 <option key={dept.id} value={dept.id}>{dept.name}</option>
                                             ))}
                                         </select>
@@ -1472,9 +1512,6 @@ function StudentReportContent() {
                                                             </span>
                                                             <span className="px-2 py-0.5 bg-white text-gray-600 text-xs rounded border border-gray-200">
                                                                 {selectedStudent.student.department}
-                                                            </span>
-                                                            <span className="px-2 py-0.5 bg-white text-gray-600 text-xs rounded border border-gray-200">
-                                                                Sem {selectedStudent.student.semester}
                                                             </span>
                                                         </div>
                                                     </div>

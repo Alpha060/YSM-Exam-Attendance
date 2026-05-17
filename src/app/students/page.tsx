@@ -27,7 +27,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { Navbar } from '@/components/ui/Navbar';
 import { AccessDenied } from '@/components/ui/access-denied';
-import { parseCoachingId, type ParsedCoachingId } from '@/lib/parseStudentId';
+import { parseCoachingId, matchBatchCode, type ParsedCoachingId } from '@/lib/parseStudentId';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 
@@ -49,6 +49,7 @@ interface Department {
     id: string;
     name: string;
     code: string;
+    status?: string;
 }
 
 interface Subject {
@@ -77,6 +78,7 @@ export default function StudentsPage() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     // Coaching ID form field
     const [coachingId, setCoachingId] = useState('');
+    const [batchWarning, setBatchWarning] = useState('');
 
     // Form States
     const [formData, setFormData] = useState({
@@ -244,16 +246,18 @@ export default function StudentsPage() {
             departmentId: ''
         });
         setCoachingId('');
+        setBatchWarning('');
         setSelectedStudentId(null);
         setParsedInfo(null);
         setError('');
         setSuccess('');
     };
 
-    // Handle Coaching ID input with auto-detection
+    // Handle Coaching ID input — UPPERCASE, longest-prefix match, completed batch check
     const handleCoachingIdChange = (value: string) => {
-        const id = value.toLowerCase();
+        const id = value.toUpperCase();
         setCoachingId(id);
+        setBatchWarning('');
 
         if (id.length < 7) {
             setParsedInfo(null);
@@ -269,11 +273,20 @@ export default function StudentsPage() {
                 setFormData(prev => ({ ...prev, rollNumber: parsed.rollNumber!.toString() }));
             }
 
-            // Auto-fill batch from coaching ID prefix
-            if (parsed.batchPrefix) {
-                const matchedDept = departments.find(d => d.code.toLowerCase() === parsed.batchPrefix);
-                if (matchedDept) {
-                    setFormData(prev => ({ ...prev, departmentId: matchedDept.id }));
+            // Auto-fill batch from coaching ID prefix using longest-match
+            if (parsed.batchPrefix && departments.length > 0) {
+                const batchCodes = departments.map(d => d.code);
+                const matchedCode = matchBatchCode(id, batchCodes);
+                if (matchedCode) {
+                    const matchedDept = departments.find(d => d.code.toUpperCase() === matchedCode.toUpperCase());
+                    if (matchedDept) {
+                        if (matchedDept.status === 'completed') {
+                            setBatchWarning(`Batch "${matchedDept.name} (${matchedDept.code})" is completed. Cannot add students to it.`);
+                            setFormData(prev => ({ ...prev, departmentId: '' }));
+                        } else {
+                            setFormData(prev => ({ ...prev, departmentId: matchedDept.id }));
+                        }
+                    }
                 }
             }
         }
@@ -698,7 +711,7 @@ export default function StudentsPage() {
             (student.first_name + ' ' + student.last_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
             String(student.roll_number).includes(searchTerm) ||
             (student.student_id?.includes(searchTerm)) ||
-            (student.coaching_id?.includes(searchTerm.toLowerCase()));
+            (student.coaching_id?.toUpperCase().includes(searchTerm.toUpperCase()));
 
         const matchesDept = !filterDepartmentId || student.department_id === filterDepartmentId;
 
@@ -985,11 +998,14 @@ export default function StudentsPage() {
                                             id="coachingId"
                                             value={coachingId}
                                             onChange={(e) => handleCoachingIdChange(e.target.value)}
-                                            placeholder="e.g., lks2026001"
-                                            className={`rounded-xl border-gray-200 lowercase ${parsedInfo?.isValid ? 'border-emerald-300 bg-emerald-50/30' : ''} ${parsedInfo && !parsedInfo.isValid && coachingId.length >= 7 ? 'border-amber-300' : ''}`}
+                                            placeholder="e.g., LKS2026001"
+                                            className={`rounded-xl border-gray-200 uppercase ${parsedInfo?.isValid && !batchWarning ? 'border-emerald-300 bg-emerald-50/30' : ''} ${batchWarning ? 'border-red-300 bg-red-50/30' : ''} ${parsedInfo && !parsedInfo.isValid && coachingId.length >= 7 ? 'border-amber-300' : ''}`}
                                         />
                                         {parsedInfo?.error && coachingId.length >= 7 && (
                                             <p className="text-amber-600 text-xs mt-1">⚠️ {parsedInfo.error}</p>
+                                        )}
+                                        {batchWarning && (
+                                            <p className="text-red-600 text-xs mt-1 font-medium">🚫 {batchWarning}</p>
                                         )}
                                     </div>
                                     <div className="col-span-2 sm:col-span-1">
@@ -1062,14 +1078,17 @@ export default function StudentsPage() {
                                     <Label htmlFor="departmentId">Batch *</Label>
                                     <select
                                         id="departmentId"
-                                        className="w-full p-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:outline-none bg-white"
+                                        className="w-full p-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:outline-none disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed bg-white"
                                         value={formData.departmentId}
                                         onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
                                         required
+                                        disabled={!!(parsedInfo?.isValid && parsedInfo?.batchPrefix && !batchWarning)}
                                     >
                                         <option value="">Select Batch</option>
-                                        {departments.map((dept) => (
-                                            <option key={dept.id} value={dept.id}>{dept.code} - {dept.name}</option>
+                                        {departments
+                                            .filter(dept => dept.status !== 'completed')
+                                            .map((dept) => (
+                                                <option key={dept.id} value={dept.id}>{dept.code} - {dept.name}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -1150,7 +1169,8 @@ export default function StudentsPage() {
                                         </Button>
                                         <Button
                                             type="submit"
-                                            className="bg-gray-900 text-white rounded-xl hover:bg-gray-800 shadow-lg shadow-gray-900/20"
+                                            disabled={!!batchWarning}
+                                            className="bg-gray-900 text-white rounded-xl hover:bg-gray-800 shadow-lg shadow-gray-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {selectedStudentId ? 'Update Student' : 'Add Student'}
                                         </Button>

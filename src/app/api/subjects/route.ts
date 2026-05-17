@@ -125,6 +125,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // Check if batch is completed
+        const batchCheck = await query<{ status: string }>(
+            'SELECT COALESCE(status, \'active\') as status FROM departments WHERE id = $1',
+            [departmentId]
+        );
+        if (batchCheck.length > 0 && batchCheck[0].status === 'completed') {
+            return NextResponse.json(
+                { error: 'Cannot add subjects to a completed batch' },
+                { status: 400 }
+            );
+        }
+
         // Check for existing subject in same batch
         const existing = await query<{ id: string }>(
             'SELECT id FROM subjects WHERE code = $1 AND department_id = $2',
@@ -195,6 +207,20 @@ export async function PUT(request: NextRequest) {
 
         if (!id) {
             return NextResponse.json({ error: 'Subject ID required' }, { status: 400 });
+        }
+
+        // Check if subject belongs to a completed batch
+        const batchCheck = await query<{ status: string }>(
+            `SELECT COALESCE(d.status, 'active') as status FROM subjects s
+             JOIN departments d ON s.department_id = d.id
+             WHERE s.id = $1`,
+            [id]
+        );
+        if (batchCheck.length > 0 && batchCheck[0].status === 'completed') {
+            return NextResponse.json(
+                { error: 'Cannot update subjects in a completed batch' },
+                { status: 400 }
+            );
         }
 
         const updateFields: string[] = [];

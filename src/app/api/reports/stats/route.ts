@@ -51,29 +51,7 @@ export async function GET(request: NextRequest) {
         const subjectParams: string[] = [];
         const attendanceParams: string[] = [];
 
-        if (effectiveRole === 'super_admin' && userId) {
-            // HOD: filter by ALL their authorized departments (including user_departments)
-            studentFilter = `AND s.department_id IN (
-                SELECT department_id FROM users WHERE id = $1
-                UNION
-                SELECT department_id FROM user_departments WHERE user_id = $1
-            )`;
-            studentParams.push(userId);
-            subjectFilter = `WHERE department_id IN (
-                SELECT department_id FROM users WHERE id = $1
-                UNION
-                SELECT department_id FROM user_departments WHERE user_id = $1
-            )`;
-            subjectParams.push(userId);
-            attendanceFilter = `AND ar.student_id IN (
-                SELECT id FROM students WHERE department_id IN (
-                    SELECT department_id FROM users WHERE id = $1
-                    UNION
-                    SELECT department_id FROM user_departments WHERE user_id = $1
-                )
-            )`;
-            attendanceParams.push(userId);
-        } else if (effectiveRole === 'teacher') {
+        if (effectiveRole === 'teacher') {
             // Teacher: filter by students in their assigned subjects
             // teacher_subjects.teacher_id references users.id directly
             studentFilter = `AND s.id IN (
@@ -109,7 +87,10 @@ export async function GET(request: NextRequest) {
         let totalStudents = 0;
         promises.push((async () => {
             try {
-                const studentQuery = `SELECT COUNT(*) as count FROM students s WHERE 1=1 ${studentFilter}`;
+                const studentQuery = `SELECT COUNT(*) as count FROM students s
+                    WHERE s.is_active = true
+                    AND s.department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active')
+                    ${studentFilter}`;
                 const studentCount = await queryOne<CountResult>(studentQuery, studentParams);
                 totalStudents = parseInt(studentCount?.count || '0');
             } catch {
@@ -121,7 +102,9 @@ export async function GET(request: NextRequest) {
         let totalSubjects = 0;
         promises.push((async () => {
             try {
-                const subjectQuery = `SELECT COUNT(*) as count FROM subjects ${subjectFilter}`;
+                const subjectQuery = `SELECT COUNT(*) as count FROM subjects
+                    WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active')
+                    ${subjectFilter ? 'AND ' + subjectFilter.replace('WHERE', '') : ''}`;
                 const subjectCount = await queryOne<CountResult>(subjectQuery, subjectParams);
                 totalSubjects = parseInt(subjectCount?.count || '0');
             } catch {
@@ -141,9 +124,11 @@ export async function GET(request: NextRequest) {
                 const todayStr = istTime.toISOString().split('T')[0];
 
                 const lectureQuery = `SELECT 
-                    COUNT(DISTINCT ar.teacher_id || '-' || ar.date::text || '-' || COALESCE(ar.semester::text, '0') || '-' || ar.lecture_number::text) as count,
+                    COUNT(DISTINCT ar.teacher_id || '-' || ar.date::text || '-' || ar.subject_id::text || '-' || ar.lecture_number::text) as count,
                     COUNT(DISTINCT ar.date) as working_days
-                    FROM attendance_records ar WHERE 1=1 ${attendanceFilter}`;
+                    FROM attendance_records ar
+                    WHERE ar.subject_id IN (SELECT id FROM subjects WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active'))
+                    ${attendanceFilter}`;
                 const lectureCount = await queryOne<CountResult & { working_days: string }>(lectureQuery, attendanceParams);
                 totalLectures = parseInt(lectureCount?.count || '0');
                 workingDays = parseInt(lectureCount?.working_days || '0');
@@ -152,8 +137,11 @@ export async function GET(request: NextRequest) {
                 const todayParams = [...attendanceParams, todayStr];
                 const todayDateIdx = todayParams.length;
                 const tQuery = `SELECT 
-                    COUNT(DISTINCT ar.teacher_id || '-' || COALESCE(ar.semester::text, '0') || '-' || ar.lecture_number::text) as count
-                    FROM attendance_records ar WHERE ar.date = $${todayDateIdx} ${attendanceFilter}`;
+                    COUNT(DISTINCT ar.teacher_id || '-' || ar.subject_id::text || '-' || ar.lecture_number::text) as count
+                    FROM attendance_records ar
+                    WHERE ar.date = $${todayDateIdx}
+                    AND ar.subject_id IN (SELECT id FROM subjects WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active'))
+                    ${attendanceFilter}`;
                 const tCount = await queryOne<CountResult>(tQuery, todayParams);
                 todaySessions = parseInt(tCount?.count || '0');
             } catch (err) {
@@ -168,7 +156,9 @@ export async function GET(request: NextRequest) {
                 const statsQuery = `SELECT 
                         COUNT(*) as total,
                         COUNT(CASE WHEN ar.status = 'present' THEN 1 END) as present
-                     FROM attendance_records ar WHERE 1=1 ${attendanceFilter}`;
+                     FROM attendance_records ar
+                     WHERE ar.subject_id IN (SELECT id FROM subjects WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active'))
+                     ${attendanceFilter}`;
                 const stats = await queryOne<AttendanceStats>(statsQuery, attendanceParams);
                 if (stats && parseInt(stats.total) > 0) {
                     averageAttendance = Math.round((parseInt(stats.present) / parseInt(stats.total)) * 100);
@@ -242,6 +232,7 @@ export async function GET(request: NextRequest) {
                         FROM departments d
                         LEFT JOIN students s ON s.department_id = d.id
                         LEFT JOIN attendance_records ar ON ar.student_id = s.id
+                        WHERE COALESCE(d.status, 'active') = 'active'
                         GROUP BY d.id, d.name
                         ORDER BY d.name
                     `;

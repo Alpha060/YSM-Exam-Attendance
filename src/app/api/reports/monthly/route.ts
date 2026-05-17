@@ -23,7 +23,6 @@ interface SubjectData {
     subject_name: string;
     subject_code: string;
     subject_paper_code: string | null;
-    semester: string;
     total_records: string;
     present_count: string;
     absent_count: string;
@@ -53,7 +52,6 @@ export async function GET(request: NextRequest) {
         };
         const month = searchParams.get('month') || getISTMonthStr();
         const departmentId = searchParams.get('departmentId');
-        const semester = searchParams.get('semester');
         const [year, monthNum] = month.split('-');
 
         // Allow HOD to view as teacher (for My Reports)
@@ -65,29 +63,11 @@ export async function GET(request: NextRequest) {
         const params: (string | number)[] = [parseInt(year), parseInt(monthNum)];
 
         // Role-based restrictions
-        if (effectiveRole === 'super_admin') {
-            if (departmentId) {
-                filters.push(`ar.student_id IN (
-                    SELECT id FROM students WHERE department_id = $${params.length + 1}
-                    AND department_id IN (
-                        SELECT department_id FROM users WHERE id = $${params.length + 2}
-                        UNION SELECT department_id FROM user_departments WHERE user_id = $${params.length + 2}
-                    )
-                )`);
-                params.push(departmentId);
-                params.push(userId);
-            } else {
-                filters.push(`ar.student_id IN (
-                    SELECT id FROM students WHERE department_id IN (
-                        SELECT department_id FROM users WHERE id = $${params.length + 1}
-                        UNION SELECT department_id FROM user_departments WHERE user_id = $${params.length + 1}
-                    )
-                )`);
-                params.push(userId);
-            }
-        } else if (effectiveRole === 'teacher') {
+        if (effectiveRole === 'teacher') {
             filters.push(`ar.teacher_id = $${params.length + 1}`);
             params.push(userId);
+            // Restrict to active batches only
+            filters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN departments d ON s.department_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
             if (departmentId) {
                 filters.push(`ar.student_id IN (
                     SELECT id FROM students WHERE department_id = $${params.length + 1}
@@ -100,14 +80,8 @@ export async function GET(request: NextRequest) {
             )`);
             params.push(departmentId);
         }
+        // super_admin with no departmentId: no filter — sees all data
 
-        // Semester filter
-        if (semester) {
-            filters.push(`ar.student_id IN (
-                SELECT id FROM students WHERE current_semester = $${params.length + 1}
-            )`);
-            params.push(parseInt(semester));
-        }
 
 
         const filterClause = filters.length > 0 ? 'AND ' + filters.join(' AND ') : '';
@@ -116,7 +90,7 @@ export async function GET(request: NextRequest) {
         const summaryResult = await query<MonthlyData>(
             `SELECT 
                 COUNT(DISTINCT ar.date) as total_days,
-                COUNT(DISTINCT ar.teacher_id || '-' || ar.date || '-' || COALESCE(ar.semester::text, '0') || '-' || ar.lecture_number) as total_lectures,
+                COUNT(DISTINCT ar.teacher_id || '-' || ar.date || '-' || ar.subject_id::text || '-' || ar.lecture_number) as total_lectures,
                 COUNT(CASE WHEN ar.status = 'present' THEN 1 END) as present_count,
                 COUNT(CASE WHEN ar.status = 'absent' THEN 1 END) as absent_count,
                 COUNT(*) as total_count

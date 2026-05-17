@@ -26,7 +26,6 @@ interface PerformanceData {
     };
     filters: {
         departments: { id: string; name: string; code: string; deptType?: string }[];
-        semesters: number[];
     };
     summary: {
         totalSessions: number;
@@ -41,7 +40,6 @@ interface PerformanceData {
         name: string;
         code: string;
         paperCode?: string;
-        semester: number;
         department: string;
         sessions: number;
         workingDays: number;
@@ -576,11 +574,18 @@ export default function MyPerformancePage() {
 </body>
 </html>`;
 
-        const printWindow = window.open('', '_blank');
-        if (printWindow) {
-            printWindow.document.write(reportHTML);
-            printWindow.document.close();
+        const blob = new Blob([reportHTML], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        const printWindow = window.open(blobUrl, '_blank');
+        if (!printWindow) {
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = 'my_performance_report.html';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     };
 
     return (
@@ -742,7 +747,7 @@ export default function MyPerformancePage() {
                                                 <div className="flex justify-between items-start mb-3">
                                                     <div>
                                                         <h3 className="font-bold text-gray-900">{subject.paperCode || subject.code} - {subject.name}</h3>
-                                                        <p className="text-xs font-medium text-gray-500 mt-0.5">({subject.code}) Sem {subject.semester} • {subject.sessions} lectures</p>
+                                                        <p className="text-xs font-medium text-gray-500 mt-0.5">({subject.code}) {subject.department} • {subject.sessions} lectures</p>
                                                     </div>
                                                     <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getAttendanceColor(subject.attendance)}`}>
                                                         {subject.attendance}%

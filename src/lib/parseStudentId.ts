@@ -1,21 +1,24 @@
 /**
  * Coaching Center Student ID Utilities
- * Handles coaching unique IDs like lks2026001, arb2026001
- * and college student IDs like BCA2025SC001
+ * Handles coaching unique IDs like LKS2026001, ARA12026001
+ * Coaching IDs are stored in UPPERCASE.
  */
 
 export interface ParsedCoachingId {
     isValid: boolean;
     error?: string;
-    batchPrefix: string | null;   // 'lks', 'arb', etc.
+    batchPrefix: string | null;   // 'LKS', 'ARA1', etc. (uppercase)
     year: number | null;          // 2026
     sequence: number | null;      // 1, 2, 3...
     rollNumber: number | null;    // same as sequence
 }
 
 /**
- * Parse a coaching unique ID (e.g., lks2026001)
- * Format: {batchCodeLowercase}{4-digit-year}{3-digit-sequence}
+ * Parse a coaching unique ID (e.g., LKS2026001 or ARA12026001)
+ * Format: {batchCode}{4-digit-year}{1-4 digit sequence}
+ * 
+ * The batchPrefix is matched greedily: it finds the longest alphabetic+numeric
+ * prefix before a 4-digit year (2020-2099) + a sequence number.
  */
 export function parseCoachingId(coachingId: string): ParsedCoachingId {
     const result: ParsedCoachingId = {
@@ -31,12 +34,15 @@ export function parseCoachingId(coachingId: string): ParsedCoachingId {
         return result;
     }
 
-    const id = coachingId.toLowerCase().trim();
+    const id = coachingId.toUpperCase().trim();
 
-    // Match pattern: letters (2-5) + 4 digits (year) + 1-4 digits (sequence)
-    const match = id.match(/^([a-z]{2,5})(\d{4})(\d{1,4})$/);
+    // Match pattern: alphanumeric prefix (2-10 chars) + 4-digit year (20xx) + 1-4 digit sequence
+    // Try longest prefix first (greedy approach)
+    // The prefix can contain letters and digits (e.g., ARA1, BATCH2)
+    // We look for a 4-digit year starting with 20 followed by digits
+    const match = id.match(/^([A-Z][A-Z0-9]{1,9}?)(20[2-9]\d)(\d{1,4})$/);
     if (!match) {
-        result.error = 'Invalid coaching ID format. Expected: prefix + year + number (e.g., lks2026001)';
+        result.error = 'Invalid coaching ID format. Expected: prefix + year + number (e.g., LKS2026001)';
         return result;
     }
 
@@ -56,21 +62,48 @@ export function parseCoachingId(coachingId: string): ParsedCoachingId {
 }
 
 /**
+ * Try to match a coaching ID prefix against a list of batch codes.
+ * Uses longest-match strategy: if codes 'ARA' and 'ARA1' both exist,
+ * 'ARA12026001' matches 'ARA1' (longest), not 'ARA'.
+ * 
+ * @param coachingId - e.g., 'ARA12026007'
+ * @param batchCodes - e.g., ['ARA', 'ARA1', 'LKS']
+ * @returns The matching batch code, or null
+ */
+export function matchBatchCode(coachingId: string, batchCodes: string[]): string | null {
+    const id = coachingId.toUpperCase().trim();
+    
+    // Sort batch codes by length descending so longest match wins
+    const sorted = [...batchCodes].sort((a, b) => b.length - a.length);
+    
+    for (const code of sorted) {
+        if (id.startsWith(code.toUpperCase())) {
+            // Verify the rest is year + sequence (at least 5 digits)
+            const rest = id.slice(code.length);
+            if (/^20[2-9]\d\d{1,4}$/.test(rest)) {
+                return code;
+            }
+        }
+    }
+    return null;
+}
+
+/**
  * Generate the next coaching ID for a batch
  * @param batchCode - The batch code (e.g., 'LKS')
  * @param year - The year (e.g., 2026)
  * @param lastSequence - The last used sequence number (0 if none)
- * @returns The next coaching ID (e.g., 'lks2026002')
+ * @returns The next coaching ID (e.g., 'LKS2026002')
  */
 export function generateCoachingId(batchCode: string, year: number, lastSequence: number): string {
-    const prefix = batchCode.toLowerCase();
+    const prefix = batchCode.toUpperCase();
     const nextSeq = (lastSequence + 1).toString().padStart(3, '0');
     return `${prefix}${year}${nextSeq}`;
 }
 
 /**
  * Extract roll number from a coaching ID
- * @param coachingId - e.g., 'lks2026001'
+ * @param coachingId - e.g., 'LKS2026001'
  * @returns The roll number (e.g., 1) or null
  */
 export function extractRollNumber(coachingId: string): number | null {

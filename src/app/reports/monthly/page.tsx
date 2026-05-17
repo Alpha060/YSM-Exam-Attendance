@@ -68,7 +68,7 @@ function MonthlyReportContent() {
 
         if (parsedUser.role === 'super_admin') {
             fetchDepartments(token);
-        } else if (parsedUser.role === 'teacher' || parsedUser.role === 'super_admin') {
+        } else if (parsedUser.role === 'teacher') {
             fetchTeacherDepartments(token, parsedUser.id);
         }
     }, [router]);

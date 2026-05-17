@@ -760,8 +760,10 @@ export default function SubjectsPage() {
                                         required
                                     >
                                         <option value="">Select Batch</option>
-                                        {departments.map(d => (
-                                            <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                                        {departments
+                                            .filter(d => d.status !== 'completed')
+                                            .map(d => (
+                                                <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
                                         ))}
                                     </select>
                                 </div>
