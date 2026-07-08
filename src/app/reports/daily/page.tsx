@@ -297,10 +297,11 @@ function DailyReportContent() {
                 return;
             }
 
-            const headers = ['S.No', 'Student ID', 'Roll Number', 'Student Name', 'Batch', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
+            const headers = ['S.No', 'College ID', 'Student ID', 'Roll Number', 'Student Name', 'Batch', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
             const rows = filteredRecords.map((r: any, index: number) => [
                 (index + 1).toString(),
-                r.studentCustomId || r.rollNumber,
+                r.studentCustomId || '-',
+                r.coachingId || '-',
                 r.rollNumber,
                 r.studentName,
                 r.batchCode || '',
@@ -326,12 +327,13 @@ function DailyReportContent() {
                 link.click();
                 document.body.removeChild(link);
             } else if (format === 'excel') {
-                const headers = ['S.No', 'Student ID', 'Roll Number', 'Student Name', 'Batch', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
+                const headers = ['S.No', 'College ID', 'Student ID', 'Roll Number', 'Student Name', 'Batch', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
                 const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
                 // Set column widths
                 worksheet['!cols'] = [
                     { wch: 5 },  // S.No
-                    { wch: 18 }, // Student ID (custom)
+                    { wch: 18 }, // College ID
+                    { wch: 18 }, // Student ID
                     { wch: 12 }, // Roll Number
                     { wch: 25 }, // Student Name
                     { wch: 10 }, // Batch

@@ -259,14 +259,14 @@ export default function MySettingsPage() {
 
                                     <div className="border-t border-gray-100 mt-6 pt-5 space-y-4 text-left">
                                         <div>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Coaching Student ID</span>
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Student ID</span>
                                             <div className="flex items-center gap-1.5 mt-1 text-gray-500 font-semibold text-sm">
                                                 <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                                 <span>{profile.coaching_id || 'N/A'}</span>
                                             </div>
                                         </div>
                                         <div>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">College Student ID</span>
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">College ID</span>
                                             <div className="flex items-center gap-1.5 mt-1 text-gray-500 font-semibold text-sm">
                                                 <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                                 <span>{profile.student_id}</span>

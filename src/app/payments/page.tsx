@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
 import { Navbar } from '@/components/ui/Navbar';
 import { AccessDenied } from '@/components/ui/access-denied';
 import { Button } from '@/components/ui/button';
 import {
-    CreditCard, Search, Filter, Plus, MoreHorizontal, CheckCircle2, Clock,
-    XCircle, RefreshCw, Trash2, Edit3, IndianRupee, TrendingUp, AlertTriangle,
-    ChevronLeft, ChevronRight, Download, X, Users, Building2
+    CreditCard, Search, MoreHorizontal, CheckCircle2, Clock,
+    RefreshCw, Trash2, Edit3, TrendingUp, AlertTriangle,
+    ChevronLeft, ChevronRight, X
 } from 'lucide-react';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
@@ -20,11 +20,10 @@ interface PaymentRecord {
     payment_method: string | null; transaction_id: string | null; description: string;
     paid_at: string | null; created_at: string; first_name: string; last_name: string;
     roll_number: number; coaching_id: string | null; email: string; phone: string | null;
-    batch_name: string; batch_code: string;
+    batch_name: string; batch_code: string; batch_id?: string;
 }
-interface Stats { totalCollected: number; totalPending: number; countPending: number; countPaid: number; }
 
-type ModalType = 'assign' | 'collect' | 'edit_amount' | null;
+type ModalType = 'collect' | 'edit_amount' | null;
 
 export default function AdminPaymentsPage() {
     const router = useRouter();
@@ -34,7 +33,6 @@ export default function AdminPaymentsPage() {
 
     const [batches, setBatches] = useState<Batch[]>([]);
     const [payments, setPayments] = useState<PaymentRecord[]>([]);
-    const [stats, setStats] = useState<Stats>({ totalCollected: 0, totalPending: 0, countPending: 0, countPaid: 0 });
     const [loadingData, setLoadingData] = useState(false);
 
     // Filters
@@ -42,20 +40,12 @@ export default function AdminPaymentsPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
 
     // Modals
     const [activeModal, setActiveModal] = useState<ModalType>(null);
     const [selectedPayment, setSelectedPayment] = useState<PaymentRecord | null>(null);
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
-
-    // Assign form
-    const [assignDesc, setAssignDesc] = useState('');
-    const [assignAmount, setAssignAmount] = useState('');
-    const [assignBatchId, setAssignBatchId] = useState('');
-    const [assignStudentId, setAssignStudentId] = useState('');
-    const [assignMode, setAssignMode] = useState<'batch' | 'student'>('batch');
 
     // Collect form
     const [collectMethod, setCollectMethod] = useState('Cash');
@@ -65,8 +55,6 @@ export default function AdminPaymentsPage() {
 
     // Edit amount
     const [editAmount, setEditAmount] = useState('');
-
-    const [paymentFrequency, setPaymentFrequency] = useState<'monthly' | 'one-time'>('monthly');
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -93,64 +81,21 @@ export default function AdminPaymentsPage() {
         if (!token) return;
         setLoadingData(true);
         try {
-            const params = new URLSearchParams();
-            if (selectedBatchId) params.set('batchId', selectedBatchId);
-            if (statusFilter) params.set('status', statusFilter);
-            if (searchQuery) params.set('search', searchQuery);
-            params.set('page', String(currentPage));
-            params.set('limit', '30');
-
-            const res = await fetch(`/api/admin/payments?${params.toString()}`, {
+            const res = await fetch(`/api/admin/payments?limit=10000`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
                 setPayments(data.payments || []);
-                setStats(data.stats || { totalCollected: 0, totalPending: 0, countPending: 0, countPaid: 0 });
-                setTotalPages(data.pagination?.totalPages || 1);
             }
         } catch (err) { console.error('Error fetching payments:', err); }
         finally { setLoadingData(false); }
-    }, [token, selectedBatchId, statusFilter, searchQuery, currentPage]);
+    }, [token]);
 
     useEffect(() => { if (user?.role === 'super_admin') { fetchBatches(); } }, [user, fetchBatches]);
     useEffect(() => { if (user?.role === 'super_admin') { fetchPayments(); } }, [user, fetchPayments]);
 
-    useEffect(() => {
-        const fetchConfig = async () => {
-            try {
-                const res = await fetch('/api/public/course-fee-config');
-                if (res.ok) {
-                    const data = await res.json();
-                    setPaymentFrequency(data.paymentFrequency || 'monthly');
-                }
-            } catch (err) {
-                console.error('Failed to fetch config', err);
-            }
-        };
-        fetchConfig();
-    }, []);
-
     const handleLogout = () => { localStorage.removeItem('token'); localStorage.removeItem('user'); router.replace('/login'); };
-
-    const handleAssignFee = async () => {
-        if (!assignDesc || !assignAmount || parseFloat(assignAmount) <= 0) return;
-        setSubmitting(true);
-        try {
-            const body: any = { description: assignDesc, amount: parseFloat(assignAmount) };
-            if (assignMode === 'batch') body.batchId = assignBatchId;
-            else body.studentId = assignStudentId;
-
-            const res = await fetch('/api/admin/payments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                body: JSON.stringify(body)
-            });
-            if (res.ok) { setActiveModal(null); setAssignDesc(''); setAssignAmount(''); fetchPayments(); }
-            else { const err = await res.json(); alert(err.error || 'Failed to assign fee.'); }
-        } catch { alert('Network error.'); }
-        finally { setSubmitting(false); }
-    };
 
     const handleCollectPayment = async () => {
         if (!selectedPayment) return;
@@ -211,6 +156,42 @@ export default function AdminPaymentsPage() {
         } catch { alert('Network error.'); }
     };
 
+    // Client-side filtering
+    const filteredPayments = useMemo(() => {
+        return payments.filter(p => {
+            if (selectedBatchId && p.batch_id !== selectedBatchId && p.batch_code !== selectedBatchId) return false;
+            if (statusFilter && p.status !== statusFilter) return false;
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                const searchStr = `${p.first_name} ${p.last_name} ${p.roll_number} ${p.coaching_id}`.toLowerCase();
+                if (!searchStr.includes(q)) return false;
+            }
+            return true;
+        });
+    }, [payments, selectedBatchId, statusFilter, searchQuery]);
+
+    // Client-side pagination
+    const itemsPerPage = 30;
+    const totalPages = Math.ceil(filteredPayments.length / itemsPerPage) || 1;
+    const paginatedPayments = filteredPayments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+    // Client-side stats computation
+    const computedStats = useMemo(() => {
+        // If we want stats to ignore 'statusFilter' or 'searchQuery' so it always shows the batch's total,
+        // we can filter `payments` only by `selectedBatchId`. Let's do that so stats remain stable.
+        const relevant = payments.filter(p => {
+            if (selectedBatchId && p.batch_id !== selectedBatchId && p.batch_code !== selectedBatchId) return false;
+            return true;
+        });
+        
+        return {
+            totalCollected: relevant.filter(p => p.status === 'completed').reduce((sum, p) => sum + Number(p.amount), 0),
+            totalPending: relevant.filter(p => p.status === 'pending').reduce((sum, p) => sum + Number(p.amount), 0),
+            countPaid: relevant.filter(p => p.status === 'completed').length,
+            countPending: relevant.filter(p => p.status === 'pending').length,
+        };
+    }, [payments, selectedBatchId]);
+
     const statusBadge = (status: string) => {
         const map: Record<string, { bg: string; text: string; label: string }> = {
             completed: { bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Paid' },
@@ -240,34 +221,28 @@ export default function AdminPaymentsPage() {
                         </div>
                         <div>
                             <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight">Fee Ledger & Payments</h1>
-                            <p className="text-sm text-gray-500 font-medium">View, assign, and manage student payments</p>
+                            <p className="text-sm text-gray-500 font-medium">View and manage student payments</p>
                         </div>
                     </div>
-                    <Button
-                        onClick={() => { setActiveModal('assign'); setAssignMode('batch'); setAssignDesc(''); setAssignAmount(''); setAssignBatchId(batches[0]?.id || ''); }}
-                        className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold text-sm px-4 py-2.5 flex items-center gap-2 shadow-sm"
-                    >
-                        <Plus className="w-4 h-4" /> Assign Fee
-                    </Button>
                 </div>
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg"><TrendingUp className="w-3.5 h-3.5" /></div><span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Collected</span></div>
-                        <span className="text-xl font-black text-gray-900">₹{stats.totalCollected.toLocaleString('en-IN')}</span>
+                        <span className="text-xl font-black text-gray-900">₹{computedStats.totalCollected.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg"><Clock className="w-3.5 h-3.5" /></div><span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Pending</span></div>
-                        <span className="text-xl font-black text-gray-900">₹{stats.totalPending.toLocaleString('en-IN')}</span>
+                        <span className="text-xl font-black text-gray-900">₹{computedStats.totalPending.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg"><CheckCircle2 className="w-3.5 h-3.5" /></div><span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Paid Bills</span></div>
-                        <span className="text-xl font-black text-gray-900">{stats.countPaid}</span>
+                        <span className="text-xl font-black text-gray-900">{computedStats.countPaid}</span>
                     </div>
                     <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
                         <div className="flex items-center gap-2 mb-2"><div className="p-1.5 bg-red-50 text-red-600 rounded-lg"><AlertTriangle className="w-3.5 h-3.5" /></div><span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Unpaid Bills</span></div>
-                        <span className="text-xl font-black text-gray-900">{stats.countPending}</span>
+                        <span className="text-xl font-black text-gray-900">{computedStats.countPending}</span>
                     </div>
                 </div>
 
@@ -300,7 +275,7 @@ export default function AdminPaymentsPage() {
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     {loadingData ? (
                         <div className="py-16 flex justify-center"><div className="w-6 h-6 border-4 border-slate-900 border-t-transparent rounded-full animate-spin"></div></div>
-                    ) : payments.length === 0 ? (
+                    ) : paginatedPayments.length === 0 ? (
                         <div className="py-16 text-center text-gray-400 font-bold text-sm">No payment records found.</div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -317,7 +292,7 @@ export default function AdminPaymentsPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {payments.map(p => (
+                                    {paginatedPayments.map(p => (
                                         <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
                                             <td className="px-4 py-3">
                                                 <div className="font-bold text-gray-900 text-sm">{p.first_name} {p.last_name}</div>
@@ -407,55 +382,6 @@ export default function AdminPaymentsPage() {
             </main>
 
             {/* ═══ MODALS ═══ */}
-
-            {/* Assign Fee Modal */}
-            {activeModal === 'assign' && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between">
-                            <h3 className="text-lg font-extrabold text-gray-900">Assign New Fee</h3>
-                            <button onClick={() => setActiveModal(null)} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5 text-gray-500" /></button>
-                        </div>
-                        <div className="flex gap-2">
-                            <button onClick={() => setAssignMode('batch')} className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 border transition-colors ${assignMode === 'batch' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                                <Building2 className="w-3.5 h-3.5" /> Entire Batch
-                            </button>
-                            <button onClick={() => setAssignMode('student')} className={`flex-1 py-2 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 border transition-colors ${assignMode === 'student' ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                                <Users className="w-3.5 h-3.5" /> Individual
-                            </button>
-                        </div>
-                        {assignMode === 'batch' ? (
-                            <div>
-                                <label className="text-xs font-bold text-gray-600 block mb-1">Select Batch</label>
-                                <select value={assignBatchId} onChange={e => setAssignBatchId(e.target.value)}
-                                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20">
-                                    {batches.map(b => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
-                                </select>
-                            </div>
-                        ) : (
-                            <div>
-                                <label className="text-xs font-bold text-gray-600 block mb-1">Student ID (UUID)</label>
-                                <input type="text" placeholder="Paste student UUID" value={assignStudentId} onChange={e => setAssignStudentId(e.target.value)}
-                                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
-                            </div>
-                        )}
-                        <div>
-                            <label className="text-xs font-bold text-gray-600 block mb-1">Description</label>
-                            <input type="text" placeholder={paymentFrequency === 'one-time' ? "e.g. Course Tuition Fee" : "e.g. July Monthly Fee"} value={assignDesc} onChange={e => setAssignDesc(e.target.value)}
-                                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
-                        </div>
-                        <div>
-                            <label className="text-xs font-bold text-gray-600 block mb-1">Amount (₹)</label>
-                            <input type="number" min={1} placeholder="1500" value={assignAmount} onChange={e => setAssignAmount(e.target.value)}
-                                className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
-                        </div>
-                        <Button onClick={handleAssignFee} disabled={submitting || !assignDesc || !assignAmount}
-                            className="w-full bg-gray-900 hover:bg-gray-800 text-white rounded-xl font-bold text-sm py-2.5">
-                            {submitting ? 'Assigning…' : 'Assign Fee'}
-                        </Button>
-                    </div>
-                </div>
-            )}
 
             {/* Collect Offline Payment Modal */}
             {activeModal === 'collect' && selectedPayment && (

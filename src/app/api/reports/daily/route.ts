@@ -177,6 +177,7 @@ export async function GET(request: NextRequest) {
                 SELECT 
                     s.id as student_id,
                     s.student_id as student_custom_id,
+                    s.coaching_id,
                     s.roll_number,
                     s.first_name,
                     s.last_name,
@@ -195,11 +196,12 @@ export async function GET(request: NextRequest) {
                 ORDER BY s.roll_number, sub.code, ar.lecture_number
             `;
 
-            const details = await query<DetailedRecord>(detailQueryStr, params);
+            const details = await query<DetailedRecord & { coaching_id: string | null }>(detailQueryStr, params);
 
             detailedRecords = details.map(d => ({
                 studentId: d.student_id,
                 studentCustomId: d.student_custom_id || '',
+                coachingId: d.coaching_id || '',
                 rollNumber: d.roll_number,
                 studentName: `${d.first_name} ${d.last_name}`,
                 batchCode: d.batch_code || '',

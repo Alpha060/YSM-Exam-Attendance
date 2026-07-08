@@ -40,6 +40,7 @@ interface SubjectOption {
 interface StudentAttendance {
     id: string;
     studentId: string;
+    coaching_id?: string | null;
     rollNumber: string;
     name: string;
     totalClasses: number;
@@ -51,6 +52,7 @@ interface StudentDetail {
     student: {
         id: string;
         studentId: string;
+        coachingId?: string | null;
         rollNumber: string;
         name: string;
         email: string;
@@ -708,7 +710,7 @@ function StudentReportContent() {
             <div class="info-card">
                 <div>
                     <h2 class="student-name">${student.name}</h2>
-                    <div class="student-roll">Student ID: ${student.studentId || '-'} | Roll No: ${student.rollNumber}</div>
+                    <div class="student-roll">College ID: ${student.studentId || '-'} | Student ID: ${student.coachingId || '-'} | Roll No: ${student.rollNumber}</div>
                 </div>
                 <div class="meta-values">
                     <div class="meta-row"><strong>Batch:</strong> ${student.batch}</div>
@@ -810,7 +812,9 @@ function StudentReportContent() {
     const filteredStudents = students.filter(student => {
         const cleanSearchTerm = searchTerm.toLowerCase().replace(/\s+/g, '');
         const matchesSearch = student.name.toLowerCase().replace(/\s+/g, '').includes(cleanSearchTerm) ||
-            (student.rollNumber && String(student.rollNumber).toLowerCase().replace(/\s+/g, '').includes(cleanSearchTerm));
+            (student.rollNumber && String(student.rollNumber).toLowerCase().replace(/\s+/g, '').includes(cleanSearchTerm)) ||
+            (student.studentId && student.studentId.toLowerCase().replace(/\s+/g, '').includes(cleanSearchTerm)) ||
+            (student.coaching_id && student.coaching_id.toLowerCase().replace(/\s+/g, '').includes(cleanSearchTerm));
 
         if (!matchesSearch) return false;
 
@@ -881,7 +885,7 @@ function StudentReportContent() {
             ? 'All Subjects'
             : availableSubjects.filter(s => pageSelectedSubjectIds.has(s.id)).map(s => s.code + ' - ' + s.name).join(', ');
 
-        const headers = ['Student ID', 'Roll Number', 'Name', 'Total Classes', 'Attended', 'Percentage', 'Status'];
+        const headers = ['College ID', 'Student ID', 'Roll Number', 'Name', 'Total Classes', 'Attended', 'Percentage', 'Status'];
         const rows = filteredStudents.map(s => {
             const status = s.percentage >= 75 ? 'Good Standing' : s.percentage >= 60 ? 'Warning' : 'Critical';
             return [

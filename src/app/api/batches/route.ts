@@ -162,7 +162,7 @@ export async function PUT(request: NextRequest) {
         if (code) {
             await query(
                 `UPDATE students 
-                 SET coaching_id = $1 || '-' || batch_year || '-' || roll_number
+                 SET coaching_id = $1 || '-' || batch_year || '-' || LPAD(roll_number::text, 4, '0')
                  WHERE batch_id = $2`,
                 [code.toUpperCase(), id]
             );

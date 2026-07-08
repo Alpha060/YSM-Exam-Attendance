@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
 
         const body = await request.json();
         let studentId = body.studentId?.trim();
-        const coachingId = body.coachingId?.trim()?.toUpperCase() || null;
+        let coachingId = body.coachingId?.trim()?.toUpperCase() || null;
         const firstName = body.firstName?.trim();
         const lastName = body.lastName?.trim() || '';
         const email = body.email?.trim() || null;
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
 
         if (!batchId) {
             return NextResponse.json(
-                { error: 'Could not determine batch. Please select a batch or use a valid coaching ID.' },
+                { error: 'Could not determine batch. Please select a batch or use a valid Student ID.' },
                 { status: 400 }
             );
         }
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
                 rollNumber = extracted;
             } else {
                 return NextResponse.json(
-                    { error: 'Invalid coaching ID format. Expected: prefix + year + number (e.g., LKS2026001)' },
+                    { error: 'Invalid Student ID format. Expected: prefix + year + number (e.g., LKS2026001)' },
                     { status: 400 }
                 );
             }
@@ -226,14 +226,21 @@ export async function POST(request: NextRequest) {
             rollNumber = (maxRoll?.max_roll || 0) + 1;
         }
 
-        // Auto-generate student_id if not explicitly provided
         if (!studentId) {
-            const configResult = await queryOne<{ value: any }>(
-                "SELECT value FROM application_settings WHERE key = 'student_id_config'"
+            return NextResponse.json(
+                { error: 'College ID is required' },
+                { status: 400 }
             );
-            const prefix = configResult?.value?.prefix || 'YSM-COMP';
-            const paddedRoll = rollNumber.toString().padStart(4, '0');
-            studentId = `${prefix}-${batchYear}-${paddedRoll}`;
+        }
+
+        // Auto-generate coaching_id if not explicitly provided
+        if (!coachingId) {
+            const batchResult = await queryOne<{ code: string }>(
+                'SELECT code FROM batches WHERE id = $1',
+                [batchId]
+            );
+            const prefix = batchResult?.code || 'L1';
+            coachingId = `${prefix}-${batchYear}-${rollNumber}`;
         }
 
         // Check for duplicate coaching ID
@@ -244,7 +251,7 @@ export async function POST(request: NextRequest) {
             );
             if (existingCoaching) {
                 return NextResponse.json(
-                    { error: 'A student with this coaching ID already exists' },
+                    { error: 'A student with this Student ID already exists' },
                     { status: 400 }
                 );
             }
@@ -255,7 +262,7 @@ export async function POST(request: NextRequest) {
             // Check duplicate email in users
             const existingUser = await queryOne<{ id: string }>(
                 'SELECT id FROM users WHERE email = $1',
-                [email]
+                [email.toLowerCase()]
             );
             if (existingUser) {
                 return NextResponse.json(
@@ -263,24 +270,19 @@ export async function POST(request: NextRequest) {
                     { status: 400 }
                 );
             }
-
-            const passwordHash = await hashPassword(password);
-            const userResult = await queryOne<{ id: string }>(
-                `INSERT INTO users (email, password_hash, first_name, last_name, role, batch_id)
-                 VALUES ($1, $2, $3, $4, 'student', $5)
-                 RETURNING id`,
-                [email.toLowerCase(), passwordHash, firstName, lastName, batchId]
-            );
-            if (!userResult) {
-                throw new Error('Failed to create user record.');
-            }
-            newStudentUuid = userResult.id;
-        } else {
-            const uuidResult = await queryOne<{ uuid: string }>(
-                "SELECT uuid_generate_v4() as uuid"
-            );
-            newStudentUuid = uuidResult?.uuid;
         }
+
+        const passwordHash = await hashPassword(password);
+        const userResult = await queryOne<{ id: string }>(
+            `INSERT INTO users (email, password_hash, first_name, last_name, role, batch_id)
+             VALUES ($1, $2, $3, $4, 'student', $5)
+             RETURNING id`,
+            [email ? email.toLowerCase() : null, passwordHash, firstName, lastName, batchId]
+        );
+        if (!userResult) {
+            throw new Error('Failed to create user record.');
+        }
+        newStudentUuid = userResult.id;
 
         const result = await query<{ id: string }>(
             `INSERT INTO students (
@@ -321,7 +323,7 @@ export async function POST(request: NextRequest) {
         console.error('Create student error:', error);
         if ((error as { code?: string }).code === '23505') {
             return NextResponse.json(
-                { error: 'Student with this ID or coaching ID already exists' },
+                { error: 'Student with this College ID or Student ID already exists' },
                 { status: 400 }
             );
         }
@@ -368,8 +370,15 @@ export async function PUT(request: NextRequest) {
         }
 
         // Get existing student first
-        const existingStudent = await queryOne<{ email: string | null; first_name: string; last_name: string; batch_id: string }>(
-            'SELECT email, first_name, last_name, batch_id FROM students WHERE id = $1',
+        const existingStudent = await queryOne<{ 
+            email: string | null; 
+            first_name: string; 
+            last_name: string; 
+            batch_id: string;
+            roll_number: number;
+            batch_year: number;
+        }>(
+            'SELECT email, first_name, last_name, batch_id, roll_number, batch_year FROM students WHERE id = $1',
             [id]
         );
 
@@ -378,28 +387,27 @@ export async function PUT(request: NextRequest) {
         const lastName = body.lastName !== undefined ? body.lastName.trim() : (existingStudent?.last_name || '');
         const batchId = body.batchId || (existingStudent?.batch_id || null);
 
-        // Update or insert into users table if email exists
-        if (email) {
-            // Check if user row already exists
-            const existingUser = await queryOne<{ id: string }>(
-                'SELECT id FROM users WHERE id = $1',
-                [id]
-            );
+        // Update or insert into users table (always keep user record for student ID login)
+        const existingUser = await queryOne<{ id: string }>(
+            'SELECT id FROM users WHERE id = $1',
+            [id]
+        );
 
-            if (existingUser) {
-                // Update user details
-                await query(
-                    `UPDATE users SET 
-                        email = $2,
-                        first_name = $3,
-                        last_name = $4,
-                        batch_id = $5,
-                        updated_at = CURRENT_TIMESTAMP
-                     WHERE id = $1`,
-                    [id, email.toLowerCase(), firstName, lastName, batchId]
-                );
-            } else {
-                // Check if the email is taken by another user
+        if (existingUser) {
+            // Update user details
+            await query(
+                `UPDATE users SET 
+                    email = $2,
+                    first_name = $3,
+                    last_name = $4,
+                    batch_id = $5,
+                    updated_at = CURRENT_TIMESTAMP
+                 WHERE id = $1`,
+                [id, email ? email.toLowerCase() : null, firstName, lastName, batchId]
+            );
+        } else {
+            if (email) {
+                // Check duplicate email
                 const emailCheck = await queryOne<{ id: string }>(
                     'SELECT id FROM users WHERE email = $1',
                     [email.toLowerCase()]
@@ -410,27 +418,24 @@ export async function PUT(request: NextRequest) {
                         { status: 400 }
                     );
                 }
-
-                // Insert new user
-                const passwordHash = await hashPassword(body.password || 'Welcome@123');
-                await query(
-                    `INSERT INTO users (id, email, password_hash, first_name, last_name, role, batch_id)
-                     VALUES ($1, $2, $3, $4, $5, 'student', $6)`,
-                    [id, email.toLowerCase(), passwordHash, firstName, lastName, batchId]
-                );
             }
 
-            // If a password was explicitly provided to reset
-            if (body.password) {
-                const passwordHash = await hashPassword(body.password);
-                await query(
-                    `UPDATE users SET password_hash = $2 WHERE id = $1`,
-                    [id, passwordHash]
-                );
-            }
-        } else {
-            // If email is removed, delete corresponding user
-            await query('DELETE FROM users WHERE id = $1', [id]);
+            // Insert new user
+            const passwordHash = await hashPassword(body.password || 'Welcome@123');
+            await query(
+                `INSERT INTO users (id, email, password_hash, first_name, last_name, role, batch_id)
+                 VALUES ($1, $2, $3, $4, $5, 'student', $6)`,
+                [id, email ? email.toLowerCase() : null, passwordHash, firstName, lastName, batchId]
+            );
+        }
+
+        // If a password was explicitly provided to reset
+        if (body.password) {
+            const passwordHash = await hashPassword(body.password);
+            await query(
+                `UPDATE users SET password_hash = $2 WHERE id = $1`,
+                [id, passwordHash]
+            );
         }
 
         const updateFields: string[] = [];
@@ -442,7 +447,18 @@ export async function PUT(request: NextRequest) {
             params.push(body.studentId.trim());
         }
         if (body.coachingId !== undefined) {
-            const cid = body.coachingId?.trim()?.toUpperCase() || null;
+            let cid = body.coachingId?.trim()?.toUpperCase() || null;
+            if (!cid) {
+                // Auto-generate coaching_id on update if it is cleared or left blank
+                const rollNumber = body.rollNumber ? parseInt(body.rollNumber) : (existingStudent?.roll_number || 1);
+                const batchYear = body.batchYear ? parseInt(body.batchYear) : (existingStudent?.batch_year || new Date().getFullYear());
+                const batchResult = await queryOne<{ code: string }>(
+                    'SELECT code FROM batches WHERE id = $1',
+                    [batchId]
+                );
+                const prefix = batchResult?.code || 'L1';
+                cid = `${prefix}-${batchYear}-${rollNumber}`;
+            }
             updateFields.push(`coaching_id = $${++paramCount}`);
             params.push(cid);
             // Update roll number from coaching ID
@@ -454,6 +470,7 @@ export async function PUT(request: NextRequest) {
                 }
             }
         }
+
         if (body.firstName !== undefined) {
             updateFields.push(`first_name = $${++paramCount}`);
             params.push(body.firstName.trim());
@@ -537,7 +554,7 @@ export async function PUT(request: NextRequest) {
         console.error('Update student error:', error);
         if ((error as { code?: string }).code === '23505') {
             return NextResponse.json(
-                { error: 'Duplicate student ID or coaching ID' },
+                { error: 'Duplicate College ID or Student ID' },
                 { status: 400 }
             );
         }

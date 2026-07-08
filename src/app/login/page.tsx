@@ -140,15 +140,15 @@ export default function LoginPage() {
 
                         <form onSubmit={handleSubmit} className="space-y-6 animate-fade-in-up delay-200">
                             <div className="space-y-2 group">
-                                <Label htmlFor="email" className="text-sm font-semibold text-gray-700 ml-1 group-focus-within:text-blue-600 transition-colors">Email Address</Label>
+                                <Label htmlFor="email" className="text-sm font-semibold text-gray-700 ml-1 group-focus-within:text-blue-600 transition-colors">Email or Student ID</Label>
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                         <Mail className="h-5 w-5 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                                     </div>
                                     <Input
                                         id="email"
-                                        type="email"
-                                        placeholder="admin@college.edu"
+                                        type="text"
+                                        placeholder="admin@college.edu or ID"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         className="pl-11 h-12 bg-gray-50/50 border-gray-200 focus:bg-white focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all rounded-xl text-base shadow-sm"

@@ -23,9 +23,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Find user by email
+        // Find user by email, coaching_id, or student_id
         const user = await queryOne<UserRow>(
-            'SELECT * FROM users WHERE email = $1',
+            `SELECT u.* FROM users u 
+             LEFT JOIN students s ON u.id = s.id 
+             WHERE u.email = $1 OR s.coaching_id = $1 OR s.student_id = $1`,
             [email]
         );
 

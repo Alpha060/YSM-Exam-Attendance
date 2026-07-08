@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         if (search) {
             whereClause += ` AND (
                 LOWER(s.first_name || ' ' || s.last_name) LIKE $${paramIdx} OR
+                LOWER(s.student_id) LIKE $${paramIdx} OR
                 LOWER(s.coaching_id) LIKE $${paramIdx} OR
                 CAST(s.roll_number AS TEXT) LIKE $${paramIdx}
             )`;
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
                 p.paid_at, p.created_at,
                 s.first_name, s.last_name, s.roll_number, s.coaching_id,
                 s.email, s.phone,
-                b.name as batch_name, b.code as batch_code
+                b.name as batch_name, b.code as batch_code, s.batch_id
              FROM payments p
              JOIN students s ON p.student_id = s.id
              LEFT JOIN batches b ON s.batch_id = b.id

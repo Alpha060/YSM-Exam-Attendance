@@ -104,8 +104,8 @@ export default function StudentsPage() {
         address: '',
         state: '',
         pincode: '',
-        password: '',
-        confirmPassword: ''
+        password: 'Welcome@123',
+        confirmPassword: 'Welcome@123'
     });
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [parsedInfo, setParsedInfo] = useState<ParsedCoachingId | null>(null);
@@ -283,8 +283,8 @@ export default function StudentsPage() {
             address: '',
             state: '',
             pincode: '',
-            password: '',
-            confirmPassword: ''
+            password: 'Welcome@123',
+            confirmPassword: 'Welcome@123'
         });
         setCoachingId('');
         setBatchWarning('');
@@ -475,7 +475,7 @@ export default function StudentsPage() {
                     body: JSON.stringify({
                         id: selectedStudentId,
                         studentId: formData.studentId,
-                        coachingId: coachingId || undefined,
+                        coachingId: coachingId || null,
                         firstName: formData.firstName,
                         lastName: formData.lastName,
                         email: formData.email || undefined,
@@ -508,7 +508,7 @@ export default function StudentsPage() {
                     },
                     body: JSON.stringify({
                         studentId: formData.studentId,
-                        coachingId: coachingId || undefined,
+                        coachingId: coachingId || null,
                         firstName: formData.firstName,
                         lastName: formData.lastName,
                         email: formData.email || undefined,
@@ -620,7 +620,7 @@ export default function StudentsPage() {
 
     // Template for coaching center students
     const downloadCoachingTemplate = () => {
-        const headers = ['student_id*', 'coaching_id', 'name*', 'email', 'batch_code*', 'phone', 'dob', 'gender', 'guardian_name', 'address', 'state', 'pincode'];
+        const headers = ['college_id*', 'student_id', 'name*', 'email', 'batch_code*', 'phone', 'dob', 'gender', 'guardian_name', 'address', 'state', 'pincode'];
         const dummyData = [
             ['BCA2025SC001', 'lks2026001', 'John Doe', 'john@example.com', 'LKS', '9876543210', '2005-05-15', 'male', 'Richard Doe', '123 Academic Lane', 'Jharkhand', '834001'],
             ['BSC2025PHY002', 'lks2026002', 'Jane Smith', 'jane@example.com', 'LKS', '9876543211', '2005-08-20', 'female', 'Mary Smith', '456 College Road', 'Jharkhand', '834002']
@@ -630,14 +630,15 @@ export default function StudentsPage() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'coaching_students_template.csv';
+        a.download = 'students_template.csv';
         a.click();
     };
 
     const normalizeData = (data: any[]) => {
         const keyMap: { [key: string]: string } = {
-            'student id': 'student_id', 'studentid': 'student_id', 'id': 'student_id',
-            'student_id*': 'student_id', 'studentid*': 'student_id',
+            'college id': 'student_id', 'collegeid': 'student_id', 'college_id': 'student_id',
+            'college_id*': 'student_id', 'collegeid*': 'student_id', 'college id*': 'student_id',
+            'student id': 'coaching_id', 'studentid': 'coaching_id', 'student_id': 'coaching_id', 'id': 'coaching_id',
             'roll number': 'roll_number', 'rollnumber': 'roll_number', 'roll': 'roll_number', 'roll_no': 'roll_number',
             'first name': 'name', 'firstname': 'name', 'name': 'name',
             'first_name*': 'name', 'firstname*': 'name', 'name*': 'name',
@@ -765,6 +766,17 @@ export default function StudentsPage() {
             };
             reader.readAsBinaryString(importFile);
         }
+    };
+
+    const getStudentIdPreview = () => {
+        if (selectedStudentId) {
+            return coachingId || 'Not Assigned';
+        }
+        const selectedBatch = batches.find(b => b.id === formData.batchId);
+        const prefix = selectedBatch?.code || '';
+        const year = formData.batchYear || new Date().getFullYear().toString();
+        const roll = formData.rollNumber || '[Auto]';
+        return prefix ? `${prefix}-${year}-${roll}` : 'Select a batch to preview ID';
     };
 
     if (loading) return <PageSkeleton type="students" />;
@@ -990,7 +1002,7 @@ export default function StudentsPage() {
                                         <div className="flex items-center gap-2 pt-3 border-t border-gray-50">
                                             {student.coaching_id && (
                                                 <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
-                                                    UID: {student.coaching_id}
+                                                    Student ID: {student.coaching_id}
                                                 </span>
                                             )}
                                             <span className="text-xs font-medium text-purple-700 bg-purple-50 px-2 py-1 rounded border border-purple-100">
@@ -1095,28 +1107,13 @@ export default function StudentsPage() {
                                             />
                                         </div>
                                         <div>
-                                            <Label htmlFor="coachingId" className="flex items-center gap-2">
-                                                Student ID (Auto/Optional)
-                                                {parsedInfo?.isValid && (
-                                                    <span className="flex items-center gap-1 text-emerald-600 text-xs font-normal">
-                                                        <CheckCircle2 className="w-3 h-3" />
-                                                        Auto-detected
-                                                    </span>
-                                                )}
-                                            </Label>
+                                            <Label htmlFor="coachingId">Student ID (Auto-generated)</Label>
                                             <Input
                                                 id="coachingId"
-                                                value={coachingId}
-                                                onChange={(e) => handleCoachingIdChange(e.target.value)}
-                                                placeholder="e.g. LKS2026001"
-                                                className={`rounded-xl border-gray-200 uppercase ${parsedInfo?.isValid && !batchWarning ? 'border-emerald-300 bg-emerald-50/30' : ''} ${batchWarning ? 'border-red-300 bg-red-50/30' : ''}`}
+                                                value={getStudentIdPreview()}
+                                                disabled
+                                                className="rounded-xl border-gray-200 uppercase bg-gray-50 text-gray-500 font-semibold cursor-not-allowed"
                                             />
-                                            {parsedInfo?.error && coachingId.length >= 7 && (
-                                                <p className="text-amber-600 text-xs mt-1">⚠️ {parsedInfo.error}</p>
-                                            )}
-                                            {batchWarning && (
-                                                <p className="text-red-600 text-xs mt-1 font-medium">🚫 {batchWarning}</p>
-                                            )}
                                         </div>
                                         {selectedStudentId && (
                                             <div>
@@ -1165,7 +1162,10 @@ export default function StudentsPage() {
                                     <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">2. Login Password (Optional)</h3>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <Label htmlFor="password">Password</Label>
+                                            <div className="flex justify-between items-center mb-1">
+                                                <Label htmlFor="password">Password</Label>
+                                                {!selectedStudentId && <span className="text-[11px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">Default: Welcome@123</span>}
+                                            </div>
                                             <Input
                                                 id="password"
                                                 type="password"
@@ -1393,12 +1393,12 @@ export default function StudentsPage() {
                                     <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                                         <div className="mb-3">
                                             <h4 className="font-semibold text-emerald-900 text-sm">Download Template</h4>
-                                            <p className="text-xs text-emerald-700 mt-0.5">Choose the template matching your student type.</p>
+                                            <p className="text-xs text-emerald-700 mt-0.5">Download the template CSV to import students.</p>
                                         </div>
                                         <div className="flex gap-2 flex-wrap">
                                             <Button variant="outline" onClick={downloadCoachingTemplate} className="bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50">
                                                 <Download className="w-3.5 h-3.5 mr-2" />
-                                                Coaching Template
+                                                Student Template
                                             </Button>
                                         </div>
                                     </div>

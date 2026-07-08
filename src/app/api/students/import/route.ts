@@ -79,7 +79,7 @@ export async function POST(req: Request) {
 
                 // 1. Basic Validation
                 if (!student.student_id || !student.first_name) {
-                    throw new Error('Missing required fields (Student ID, Name)');
+                    throw new Error('Missing required fields (College ID, Name)');
                 }
 
                 // 2. Find batch/batch
@@ -191,18 +191,14 @@ export async function POST(req: Request) {
                     }
 
                     if (!targetStudentUuid) {
-                        if (email) {
-                            // Create user row first
-                            const userRes = await client.query(
-                                `INSERT INTO users (email, password_hash, first_name, last_name, role, batch_id)
-                                 VALUES ($1, $2, $3, $4, 'student', $5)
-                                 RETURNING id`,
-                                [email, defaultPasswordHash, student.first_name, student.last_name || '', deptId]
-                            );
-                            targetStudentUuid = userRes.rows[0].id;
-                        } else {
-                            targetStudentUuid = uuidv4();
-                        }
+                        // Create user row first even if email is missing (for student_id login)
+                        const userRes = await client.query(
+                            `INSERT INTO users (email, password_hash, first_name, last_name, role, batch_id)
+                             VALUES ($1, $2, $3, $4, 'student', $5)
+                             RETURNING id`,
+                            [email || null, defaultPasswordHash, student.first_name, student.last_name || '', deptId]
+                        );
+                        targetStudentUuid = userRes.rows[0].id;
                     }
 
                     // 5. Buffer NEW Student for insert

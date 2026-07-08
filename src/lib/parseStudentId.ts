@@ -30,19 +30,21 @@ export function parseCoachingId(coachingId: string): ParsedCoachingId {
     };
 
     if (!coachingId || coachingId.length < 7) {
-        result.error = 'Coaching ID too short';
+        result.error = 'Student ID too short';
         return result;
     }
 
     const id = coachingId.toUpperCase().trim();
 
-    // Match pattern: alphanumeric prefix (2-10 chars) + 4-digit year (20xx) + 1-4 digit sequence
-    // Try longest prefix first (greedy approach)
-    // The prefix can contain letters and digits (e.g., ARA1, BATCH2)
-    // We look for a 4-digit year starting with 20 followed by digits
-    const match = id.match(/^([A-Z][A-Z0-9]{1,9}?)(20[2-9]\d)(\d{1,4})$/);
+    // Try matching hyphenated first (e.g. L1-2026-1)
+    let match = id.match(/^([A-Z0-9-]+)-(20[2-9]\d)-(\d{1,4})$/);
     if (!match) {
-        result.error = 'Invalid coaching ID format. Expected: prefix + year + number (e.g., LKS2026001)';
+        // Fallback to legacy format: prefix + year + number (e.g. LKS2026001)
+        match = id.match(/^([A-Z][A-Z0-9]{1,9}?)(20[2-9]\d)(\d{1,4})$/);
+    }
+
+    if (!match) {
+        result.error = 'Invalid Student ID format. Expected: prefix-year-number (e.g., L1-2026-1)';
         return result;
     }
 
@@ -80,6 +82,9 @@ export function matchBatchCode(coachingId: string, batchCodes: string[]): string
         if (id.startsWith(code.toUpperCase())) {
             // Verify the rest is year + sequence (at least 5 digits)
             const rest = id.slice(code.length);
+            if (/^-(20[2-9]\d)-(\d{1,4})$/.test(rest)) {
+                return code;
+            }
             if (/^20[2-9]\d\d{1,4}$/.test(rest)) {
                 return code;
             }

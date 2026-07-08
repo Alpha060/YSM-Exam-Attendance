@@ -5,6 +5,7 @@ import { verifyToken } from '@/lib/auth';
 interface StudentDetail {
     id: string;
     student_id: string;
+    coaching_id: string | null;
     roll_number: string;
     first_name: string;
     last_name: string;
@@ -66,7 +67,7 @@ export async function GET(
 
         // Get student basic info
         const studentInfo = await query<StudentDetail>(
-            `SELECT s.id, s.student_id, s.roll_number, s.first_name, s.last_name, s.email, 
+            `SELECT s.id, s.student_id, s.coaching_id, s.roll_number, s.first_name, s.last_name, s.email, 
                     d.name as batch_name
              FROM students s
              LEFT JOIN batches d ON d.id = s.batch_id
@@ -247,6 +248,7 @@ export async function GET(
             student: {
                 id: student.id,
                 studentId: student.student_id,
+                coachingId: student.coaching_id,
                 rollNumber: student.roll_number,
                 name: `${student.first_name} ${student.last_name}`,
                 email: student.email || 'N/A',

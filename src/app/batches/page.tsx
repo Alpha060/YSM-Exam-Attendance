@@ -71,6 +71,7 @@ export default function BatchesPage() {
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'all' | Batch['status']>('all');
+    const [paymentFrequency, setPaymentFrequency] = useState<'monthly' | 'one-time'>('monthly');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [completingId, setCompletingId] = useState<string | null>(null);
 
@@ -92,6 +93,12 @@ export default function BatchesPage() {
         } catch { /* ignore cache errors */ }
 
         fetchBatches(token);
+
+        fetch('/api/public/course-fee-config')
+            .then(res => res.ok ? res.json() : {})
+            .then((data: any) => setPaymentFrequency(data.paymentFrequency || 'monthly'))
+            .catch(console.error);
+
     }, [router]);
 
     useRealtimeData({
@@ -323,6 +330,7 @@ export default function BatchesPage() {
                                         <th className="px-4 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">S.No.</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Code</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch Name</th>
+                                        <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Fee</th>
                                         <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                         <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
@@ -341,6 +349,11 @@ export default function BatchesPage() {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="text-sm font-medium text-gray-900">{dept.name}</div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="text-sm font-semibold text-gray-700 bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">
+                                                        ₹{dept.tuition_fee || 0}{paymentFrequency === 'monthly' ? '/mo' : ''}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border ${sc.badge}`}>
@@ -410,7 +423,7 @@ export default function BatchesPage() {
                                                             <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
                                                             {sc.label}
                                                         </span>
-                                                        <span className="text-xs bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded font-medium">₹{dept.tuition_fee || 0}/mo</span>
+                                                        <span className="text-xs bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded font-medium">₹{dept.tuition_fee || 0}{paymentFrequency === 'monthly' ? '/mo' : ''}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -481,7 +494,7 @@ export default function BatchesPage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label htmlFor="tuition_fee" className="text-gray-700">Tuition Fee (₹/month) <span className="text-red-500">*</span></Label>
+                                    <Label htmlFor="tuition_fee" className="text-gray-700">{paymentFrequency === 'monthly' ? 'Monthly Tuition Fee (₹)' : 'Course Tuition Fee (₹)'} <span className="text-red-500">*</span></Label>
                                     <Input
                                         id="tuition_fee"
                                         type="number"
