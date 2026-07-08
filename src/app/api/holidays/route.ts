@@ -7,7 +7,7 @@ interface HolidayRow {
     name: string;
     date: string;
     description: string | null;
-    department_id: string | null;
+    batch_id: string | null;
 }
 
 export async function GET(request: NextRequest) {
@@ -24,15 +24,15 @@ export async function GET(request: NextRequest) {
         }
 
         try {
-            let queryStr = 'SELECT id, name, date, description, department_id FROM holidays';
+            let queryStr = 'SELECT id, name, date, description, batch_id FROM holidays';
             const params: any[] = [];
 
-            if (payload.role === 'super_admin' && payload.departmentId) {
-                queryStr += ' WHERE department_id IS NULL OR department_id = $1';
-                params.push(payload.departmentId);
+            if (payload.role === 'super_admin' && payload.batchId) {
+                queryStr += ' WHERE batch_id IS NULL OR batch_id = $1';
+                params.push(payload.batchId);
             } else if (payload.role === 'teacher') {
-                queryStr += ` WHERE department_id IS NULL OR department_id IN (
-                    SELECT department_id FROM user_departments WHERE user_id = $1
+                queryStr += ` WHERE batch_id IS NULL OR batch_id IN (
+                    SELECT batch_id FROM user_batches WHERE user_id = $1
                 )`;
                 params.push(payload.userId);
             }
@@ -70,13 +70,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Name and date are required' }, { status: 400 });
         }
 
-        const departmentId = payload.role === 'super_admin' ? payload.departmentId : null;
+        const batchId = payload.role === 'super_admin' ? payload.batchId : null;
 
         const holidays = await query<HolidayRow>(
-            `INSERT INTO holidays (name, date, description, department_id)
+            `INSERT INTO holidays (name, date, description, batch_id)
              VALUES ($1, $2, $3, $4)
              RETURNING *`,
-            [name, date, description || null, departmentId]
+            [name, date, description || null, batchId]
         );
 
         return NextResponse.json({ holiday: holidays[0] }, { status: 201 });

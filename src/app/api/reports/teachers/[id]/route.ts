@@ -7,11 +7,11 @@ interface TeacherDetail {
     first_name: string;
     last_name: string;
     email: string;
-    department_id: string;
-    department_name: string;
+    batch_id: string;
+    batch_name: string;
 }
 
-interface DepartmentInfo {
+interface BatchInfo {
     id: string;
     name: string;
     code: string;
@@ -21,9 +21,9 @@ interface SubjectStats {
     subject_id: string;
     subject_name: string;
     subject_code: string;
-    department_id: string;
-    department_name: string;
-    department_status: string;
+    batch_id: string;
+    batch_name: string;
+    batch_status: string;
     assigned_date: string | null;
     unassigned_date: string | null;
     total_sessions: string;
@@ -65,7 +65,7 @@ export async function GET(
 
         const { id: teacherId } = await params;
         const { searchParams } = new URL(request.url);
-        const filterDeptId = searchParams.get('departmentId');
+        const filterDeptId = searchParams.get('batchId');
         const dateFrom = searchParams.get('dateFrom');
         const dateTo = searchParams.get('dateTo');
 
@@ -75,9 +75,9 @@ export async function GET(
         // Get teacher basic info
         const teacherInfo = await query<TeacherDetail>(
             `SELECT u.id, u.first_name, u.last_name, u.email, 
-                    u.department_id, d.name as department_name
+                    u.batch_id, d.name as batch_name
              FROM users u
-             LEFT JOIN departments d ON d.id = u.department_id
+             LEFT JOIN batches d ON d.id = u.batch_id
              WHERE u.id = $1`,
             [teacherId]
         );
@@ -86,15 +86,15 @@ export async function GET(
             return NextResponse.json({ error: 'Teacher not found' }, { status: 404 });
         }
 
-        // Get departments this teacher is associated with.
+        // Get batches this teacher is associated with.
         // Teachers only see their ACTIVE batches; super_admin sees all.
-        const departments = await query<DepartmentInfo>(
+        const batches = await query<BatchInfo>(
             `SELECT d.id, d.name, d.code
-             FROM departments d
+             FROM batches d
              WHERE d.id IN (
-                SELECT department_id FROM users WHERE id = $1
+                SELECT batch_id FROM users WHERE id = $1
                 UNION
-                SELECT department_id FROM user_departments WHERE user_id = $1
+                SELECT batch_id FROM user_batches WHERE user_id = $1
              )
              ${isTeacher ? "AND COALESCE(d.status, 'active') = 'active'" : ''}
              ORDER BY d.name`,
@@ -112,7 +112,7 @@ export async function GET(
 
         if (filterDeptId) {
             subjectParams.push(filterDeptId);
-            subjectFilters.push(`s.department_id = $${subjectParams.length}`);
+            subjectFilters.push(`s.batch_id = $${subjectParams.length}`);
         }
 
         if (dateFrom) {
@@ -131,9 +131,9 @@ export async function GET(
                 s.name as subject_name,
                 s.code as subject_code,
                 s.paper_code as paper_code,
-                MIN(d.id::text) as department_id,
-                string_agg(DISTINCT COALESCE(d.code, d.name), ', ') as department_name,
-                MAX(COALESCE(d.status, 'active')) as department_status,
+                MIN(d.id::text) as batch_id,
+                string_agg(DISTINCT COALESCE(d.code, d.name), ', ') as batch_name,
+                MAX(COALESCE(d.status, 'active')) as batch_status,
                 MIN(ts.assigned_date::text) as assigned_date,
                 MAX(ts.unassigned_date::text) as unassigned_date,
                 COUNT(DISTINCT ar.date || '-' || ar.subject_id::text || '-' || ar.lecture_number) as total_sessions,
@@ -149,7 +149,7 @@ export async function GET(
                 ) as avg_attendance
              FROM teacher_subjects ts
              JOIN subjects s ON s.id = ts.subject_id
-             LEFT JOIN departments d ON d.id = s.department_id
+             LEFT JOIN batches d ON d.id = s.batch_id
              LEFT JOIN attendance_records ar ON ar.subject_id = s.id AND ar.teacher_id = ts.teacher_id
              WHERE ${subjectFilters.join(' AND ')}
              GROUP BY s.code, s.name, s.paper_code
@@ -166,12 +166,12 @@ export async function GET(
 
         // Teachers: only show daily records for active batches
         if (isTeacher) {
-            dailyFilters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN departments d ON s.department_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
+            dailyFilters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN batches d ON s.batch_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
         }
 
         if (filterDeptId) {
             dailyParams.push(filterDeptId);
-            dailyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE department_id = $${dailyParams.length})`);
+            dailyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE batch_id = $${dailyParams.length})`);
         }
         if (dateFrom) {
             dailyParams.push(dateFrom);
@@ -203,12 +203,12 @@ export async function GET(
 
         // Teachers: restrict monthly stats to active batches only
         if (isTeacher) {
-            monthlyFilters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN departments d ON s.department_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
+            monthlyFilters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN batches d ON s.batch_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
         }
 
         if (filterDeptId) {
             monthlyParams.push(filterDeptId);
-            monthlyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE department_id = $${monthlyParams.length})`);
+            monthlyFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE batch_id = $${monthlyParams.length})`);
         }
         if (dateFrom) {
             monthlyParams.push(dateFrom);
@@ -246,12 +246,12 @@ export async function GET(
 
         // Teachers: restrict overall summary to active batches only
         if (isTeacher) {
-            overallFilters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN departments d ON s.department_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
+            overallFilters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN batches d ON s.batch_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
         }
 
         if (filterDeptId) {
             overallParams.push(filterDeptId);
-            overallFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE department_id = $${overallParams.length})`);
+            overallFilters.push(`ar.subject_id IN (SELECT id FROM subjects WHERE batch_id = $${overallParams.length})`);
         }
         if (dateFrom) {
             overallParams.push(dateFrom);
@@ -294,10 +294,10 @@ export async function GET(
                 id: teacher.id,
                 name: `${teacher.first_name} ${teacher.last_name}`,
                 email: teacher.email,
-                department: teacher.department_name || 'N/A'
+                batch: teacher.batch_name || 'N/A'
             },
             filters: {
-                departments: departments.map(d => ({ id: d.id, name: d.name, code: d.code })),
+                batches: batches.map(d => ({ id: d.id, name: d.name, code: d.code })),
             },
             summary: {
                 totalSessions: computedTotalSessions,
@@ -312,8 +312,8 @@ export async function GET(
                 name: s.subject_name,
                 code: s.subject_code,
                 paperCode: s.paper_code,
-                department: s.department_name,
-                batchStatus: s.department_status,
+                batch: s.batch_name,
+                batchStatus: s.batch_status,
                 assignedDate: s.assigned_date,
                 unassignedDate: s.unassigned_date,
                 isActive: s.unassigned_date === null,

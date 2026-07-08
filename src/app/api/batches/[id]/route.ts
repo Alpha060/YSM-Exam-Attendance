@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
-interface DepartmentRow {
+interface BatchRow {
     id: string;
     name: string;
     code: string;
     hod_name: string | null;
 }
 
-// GET - Get single department
+// GET - Get single batch
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -27,27 +27,27 @@ export async function GET(
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        const department = await queryOne<DepartmentRow>(
+        const batch = await queryOne<BatchRow>(
             `SELECT d.id, d.name, d.code,
                     CONCAT(u.first_name, ' ', u.last_name) as hod_name
-             FROM departments d
-             LEFT JOIN users u ON u.department_id = d.id AND u.role = 'teacher'
+             FROM batches d
+             LEFT JOIN users u ON u.batch_id = d.id AND u.role = 'teacher'
              WHERE d.id = $1`,
             [id]
         );
 
-        if (!department) {
-            return NextResponse.json({ error: 'Department not found' }, { status: 404 });
+        if (!batch) {
+            return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ department });
+        return NextResponse.json({ batch });
     } catch (error) {
-        console.error('Get department error:', error);
+        console.error('Get batch error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
     }
 }
 
-// PUT - Update department (super_admin only)
+// PUT - Update batch (super_admin only)
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -67,24 +67,24 @@ export async function PUT(
 
         const { name, code } = await request.json();
 
-        const departments = await query<DepartmentRow>(
-            `UPDATE departments SET name = $1, code = $2, updated_at = NOW()
+        const batches = await query<BatchRow>(
+            `UPDATE batches SET name = $1, code = $2, updated_at = NOW()
              WHERE id = $3 RETURNING *, NULL as hod_name`,
             [name, code?.toUpperCase(), id]
         );
 
-        if (departments.length === 0) {
-            return NextResponse.json({ error: 'Department not found' }, { status: 404 });
+        if (batches.length === 0) {
+            return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ department: departments[0] });
+        return NextResponse.json({ batch: batches[0] });
     } catch (error) {
-        console.error('Update department error:', error);
+        console.error('Update batch error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
     }
 }
 
-// DELETE - Delete department (super_admin only)
+// DELETE - Delete batch (super_admin only)
 export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -102,18 +102,18 @@ export async function DELETE(
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const departments = await query<DepartmentRow>(
-            'DELETE FROM departments WHERE id = $1 RETURNING *',
+        const batches = await query<BatchRow>(
+            'DELETE FROM batches WHERE id = $1 RETURNING *',
             [id]
         );
 
-        if (departments.length === 0) {
-            return NextResponse.json({ error: 'Department not found' }, { status: 404 });
+        if (batches.length === 0) {
+            return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ message: 'Department deleted' });
+        return NextResponse.json({ message: 'Batch deleted' });
     } catch (error) {
-        console.error('Delete department error:', error);
+        console.error('Delete batch error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
     }
 }

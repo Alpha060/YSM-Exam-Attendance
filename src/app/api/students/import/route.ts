@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
 import { parseCoachingId } from '@/lib/parseStudentId';
+import { hashPassword } from '@/lib/auth';
 
 export async function POST(req: Request) {
     const client = await pool.connect();
@@ -24,16 +25,19 @@ export async function POST(req: Request) {
             errors: [] as { row: number, name: string, error: string }[]
         };
 
-        // Cache batches (departments) for validation — include status
+        // Cache batches (batches) for validation — include status
         const deptResult = await client.query(
-            "SELECT id, code, name, COALESCE(status, 'active') as status FROM departments"
+            "SELECT id, code, name, COALESCE(status, 'active') as status FROM batches"
         );
-        const departmentMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id, name: d.name, status: d.status }]));
+        const batchMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id, name: d.name, status: d.status }]));
 
         // Get current academic year
         const now = new Date();
         const y = now.getFullYear();
         const academicYear = now.getMonth() >= 5 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
+
+        // Pre-hash the default password
+        const defaultPasswordHash = await hashPassword('Welcome@123');
 
         // Batch: Fetch all existing student_ids
         const allStudentIds = students
@@ -44,7 +48,7 @@ export async function POST(req: Request) {
             .map((s: any) => s.coaching_id.toUpperCase());
 
         const existingResult = await client.query(
-            `SELECT id, student_id, coaching_id, email, first_name, last_name, roll_number, department_id FROM students 
+            `SELECT id, student_id, coaching_id, email, first_name, last_name, roll_number, batch_id FROM students 
              WHERE student_id = ANY($1) OR (coaching_id = ANY($2) AND coaching_id IS NOT NULL)`,
             [allStudentIds, allCoachingIds]
         );
@@ -78,18 +82,14 @@ export async function POST(req: Request) {
                     throw new Error('Missing required fields (Student ID, Name)');
                 }
 
-                // 2. Find batch/department
+                // 2. Find batch/batch
                 let deptId: string | undefined;
                 let deptStatus: string | undefined;
                 const coachingId = student.coaching_id?.trim()?.toUpperCase() || null;
 
-                // Try to find batch from batch_code or department_code column
+                // Try to find batch from batch_code or batch_code column
                 if (student.batch_code) {
-                    const entry = departmentMap.get(student.batch_code.toUpperCase());
-                    deptId = entry?.id;
-                    deptStatus = entry?.status;
-                } else if (student.department_code) {
-                    const entry = departmentMap.get(student.department_code.toUpperCase());
+                    const entry = batchMap.get(student.batch_code.toUpperCase());
                     deptId = entry?.id;
                     deptStatus = entry?.status;
                 }
@@ -99,13 +99,13 @@ export async function POST(req: Request) {
                     const parsed = parseCoachingId(coachingId);
                     if (parsed.isValid && parsed.batchPrefix) {
                         // Try longest prefix match
-                        const allCodes = Array.from(departmentMap.keys());
+                        const allCodes = Array.from(batchMap.keys());
                         const sortedCodes = allCodes.sort((a, b) => b.length - a.length);
                         for (const code of sortedCodes) {
                             if (coachingId.startsWith(code)) {
                                 const rest = coachingId.slice(code.length);
                                 if (/^20[2-9]\d\d{1,4}$/.test(rest)) {
-                                    const entry = departmentMap.get(code);
+                                    const entry = batchMap.get(code);
                                     deptId = entry?.id;
                                     deptStatus = entry?.status;
                                     break;
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
                 }
 
                 if (!deptId) {
-                    throw new Error(`Could not find batch for: ${student.batch_code || student.department_code || 'unknown'}. Please provide a valid batch_code.`);
+                    throw new Error(`Could not find batch for: ${student.batch_code || 'unknown'}. Please provide a valid batch_code.`);
                 }
 
                 // Block completed batches
@@ -136,47 +136,126 @@ export async function POST(req: Request) {
                     }
                 }
 
+                // Extract all other profile fields
+                const phone = student.phone ? String(student.phone).trim() : null;
+                const dob = student.dob || null;
+                const gender = student.gender ? String(student.gender).trim().toLowerCase() : null;
+                const guardianName = student.guardian_name ? String(student.guardian_name).trim() : (student.guardianName ? String(student.guardianName).trim() : null);
+                const address = student.address ? String(student.address).trim() : null;
+                const state = student.state ? String(student.state).trim() : null;
+                const pincode = student.pincode ? String(student.pincode).trim() : null;
+
                 // 4. Check if student exists
                 const sid = student.student_id.toUpperCase();
                 const existingStudent = existingStudentMap.get(sid);
 
+                let targetStudentUuid = null;
+                const email = student.email ? student.email.trim().toLowerCase() : null;
+
                 if (existingStudent) {
-                    // Update existing — track if batch changed for re-sync
-                    const batchChanged = existingStudent.department_id !== deptId;
+                    targetStudentUuid = existingStudent.id;
+
+                    // Update existing
+                    const batchChanged = existingStudent.batch_id !== deptId;
                     updateBatch.push({
-                        existingId: existingStudent.id,
+                        existingId: targetStudentUuid,
                         sid,
                         coachingId,
                         rollNumber,
                         firstName: student.first_name,
                         lastName: student.last_name || '',
-                        email: student.email || existingStudent.email || null,
+                        email: email || existingStudent.email || null,
                         deptId,
                         batchYear,
                         batchChanged,
+                        phone,
+                        dob,
+                        gender,
+                        guardianName,
+                        address,
+                        state,
+                        pincode
                     });
                     results.updated++;
-                    existingStudentMap.set(sid, { ...existingStudent, first_name: student.first_name });
-                    continue;
+                } else {
+                    // Check if email already taken
+                    if (email) {
+                        const emailCheck = await client.query(
+                            'SELECT id FROM users WHERE email = $1',
+                            [email]
+                        );
+                        if (emailCheck.rows.length > 0) {
+                            // Link to existing user ID if user exists
+                            targetStudentUuid = emailCheck.rows[0].id;
+                        }
+                    }
+
+                    if (!targetStudentUuid) {
+                        if (email) {
+                            // Create user row first
+                            const userRes = await client.query(
+                                `INSERT INTO users (email, password_hash, first_name, last_name, role, batch_id)
+                                 VALUES ($1, $2, $3, $4, 'student', $5)
+                                 RETURNING id`,
+                                [email, defaultPasswordHash, student.first_name, student.last_name || '', deptId]
+                            );
+                            targetStudentUuid = userRes.rows[0].id;
+                        } else {
+                            targetStudentUuid = uuidv4();
+                        }
+                    }
+
+                    // 5. Buffer NEW Student for insert
+                    studentBatch.push({
+                        newStudentId: targetStudentUuid,
+                        sid,
+                        coachingId,
+                        rollNumber,
+                        firstName: student.first_name,
+                        lastName: student.last_name || '',
+                        email: email,
+                        deptId,
+                        batchYear,
+                        phone,
+                        dob,
+                        gender,
+                        guardianName,
+                        address,
+                        state,
+                        pincode
+                    });
+                    results.success++;
                 }
 
-                const newStudentId = uuidv4();
+                // If email is provided for existing student, check/create user row
+                if (existingStudent && email) {
+                    const userCheck = await client.query(
+                        'SELECT id FROM users WHERE id = $1',
+                        [targetStudentUuid]
+                    );
 
-                // 5. Buffer NEW Student for insert
-                studentBatch.push({
-                    newStudentId,
-                    sid,
-                    coachingId,
-                    rollNumber,
-                    firstName: student.first_name,
-                    lastName: student.last_name || '',
-                    email: student.email || null,
-                    deptId,
-                    batchYear,
-                });
-
-                existingStudentMap.set(sid, { id: newStudentId });
-                results.success++;
+                    if (userCheck.rows.length > 0) {
+                        // Update existing user details
+                        await client.query(
+                            `UPDATE users SET 
+                                email = $2,
+                                first_name = $3,
+                                last_name = $4,
+                                batch_id = $5,
+                                updated_at = CURRENT_TIMESTAMP
+                             WHERE id = $1`,
+                            [targetStudentUuid, email, student.first_name, student.last_name || '', deptId]
+                        );
+                    } else {
+                        // Create users record with the same ID
+                        await client.query(
+                            `INSERT INTO users (id, email, password_hash, first_name, last_name, role, batch_id)
+                             VALUES ($1, $2, $3, $4, $5, 'student', $6)
+                             ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email`,
+                            [targetStudentUuid, email, defaultPasswordHash, student.first_name, student.last_name || '', deptId]
+                        );
+                    }
+                }
 
             } catch (err: any) {
                 results.failed++;
@@ -196,14 +275,19 @@ export async function POST(req: Request) {
                 const values: string[] = [];
                 const params: any[] = [];
                 chunk.forEach((s, idx) => {
-                    const offset = idx * 9;
-                    values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`);
-                    params.push(s.newStudentId, s.sid, s.coachingId, s.rollNumber, s.firstName, s.lastName, s.email, s.deptId, s.batchYear);
+                    const offset = idx * 16;
+                    values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16})`);
+                    params.push(
+                        s.newStudentId, s.sid, s.coachingId, s.rollNumber,
+                        s.firstName, s.lastName, s.email, s.deptId, s.batchYear,
+                        s.phone, s.dob, s.gender, s.guardianName, s.address, s.state, s.pincode
+                    );
                 });
                 await client.query(
                     `INSERT INTO students (
                         id, student_id, coaching_id, roll_number,
-                        first_name, last_name, email, department_id, batch_year
+                        first_name, last_name, email, batch_id, batch_year,
+                        phone, dob, gender, guardian_name, address, state, pincode
                     ) VALUES ${values.join(', ')}`,
                     params
                 );
@@ -214,7 +298,7 @@ export async function POST(req: Request) {
                 await client.query(
                     `INSERT INTO student_subjects (student_id, subject_id, academic_year)
                      SELECT $1, sub.id, $2 FROM subjects sub
-                     WHERE sub.department_id = $3
+                     WHERE sub.batch_id = $3
                      ON CONFLICT (student_id, subject_id, academic_year) DO NOTHING`,
                     [s.newStudentId, academicYear, s.deptId]
                 );
@@ -226,10 +310,16 @@ export async function POST(req: Request) {
             await client.query(
                 `UPDATE students SET 
                     roll_number = $1, first_name = $2, last_name = $3, email = $4,
-                    department_id = $5, batch_year = $6, coaching_id = COALESCE($7, coaching_id),
+                    batch_id = $5, batch_year = $6, coaching_id = COALESCE($7, coaching_id),
+                    phone = $8, dob = $9, gender = $10, guardian_name = $11, address = $12, state = $13, pincode = $14,
                     updated_at = CURRENT_TIMESTAMP
-                 WHERE id = $8`,
-                [s.rollNumber, s.firstName, s.lastName, s.email, s.deptId, s.batchYear, s.coachingId, s.existingId]
+                 WHERE id = $15`,
+                [
+                    s.rollNumber, s.firstName, s.lastName, s.email,
+                    s.deptId, s.batchYear, s.coachingId,
+                    s.phone, s.dob, s.gender, s.guardianName, s.address, s.state, s.pincode,
+                    s.existingId
+                ]
             );
 
             // If batch changed, re-sync subjects
@@ -241,7 +331,7 @@ export async function POST(req: Request) {
                 await client.query(
                     `INSERT INTO student_subjects (student_id, subject_id, academic_year)
                      SELECT $1, sub.id, $2 FROM subjects sub
-                     WHERE sub.department_id = $3
+                     WHERE sub.batch_id = $3
                      ON CONFLICT (student_id, subject_id, academic_year) DO NOTHING`,
                     [s.existingId, academicYear, s.deptId]
                 );

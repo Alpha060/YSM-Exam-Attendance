@@ -30,7 +30,7 @@ import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { getInitials } from '@/lib/utils';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 
-interface DepartmentInfo {
+interface BatchInfo {
     id: string;
     name: string;
     code: string;
@@ -43,15 +43,16 @@ interface Teacher {
     last_name: string;
     email: string;
     role: string;
-    department_id: string | null;
-    department_name?: string;
-    department_code?: string;
-    departments?: DepartmentInfo[];
-    subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; departmentId?: string; }[];
-    archived_subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; departmentId?: string; assignedDate: string; unassignedDate: string; }[];
+    batch_id: string | null;
+    batch_name?: string;
+    batch_code?: string;
+    batches?: BatchInfo[];
+    subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; batchId?: string; }[];
+    archived_subjects?: { assignmentId: string; subjectId: string; code: string; paperCode?: string | null; name: string; batchId?: string; assignedDate: string; unassignedDate: string; }[];
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -62,7 +63,7 @@ interface Subject {
     code: string;
     paperCode?: string | null;
     name: string;
-    departmentId: string;
+    batchId: string;
 }
 
 interface User {
@@ -70,13 +71,13 @@ interface User {
     lastName: string;
     email: string;
     role: 'super_admin' | 'teacher';
-    departmentId?: string;
+    batchId?: string;
 }
 
 export default function TeachersPage() {
     const router = useRouter();
     const [teachers, setTeachers] = useState<Teacher[]>([]);
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<User | null>(null);
@@ -87,14 +88,14 @@ export default function TeachersPage() {
     const [formData, setFormData] = useState({
         name: '', email: '', role: 'teacher', password: ''
     });
-    const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<string[]>([]);
+    const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
     const [selectedSubjectKeys, setSelectedSubjectKeys] = useState<string[]>([]);
     const [selectedTeacherId, setSelectedTeacherId] = useState<string | null>(null);
     const [enablePasswordUpdate, setEnablePasswordUpdate] = useState(false);
 
     // Search & Filter
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterDepartmentId, setFilterDepartmentId] = useState('');
+    const [filterBatchId, setFilterBatchId] = useState('');
 
 
     // Import States
@@ -107,17 +108,17 @@ export default function TeachersPage() {
     // Default academic year
     const [academicYear] = useState('2025-2026');
 
-    // Filter subjects based on selected departments (batches)
+    // Filter subjects based on selected batches (batches)
     const filteredSubjects = useMemo(() => {
-        if (selectedDepartmentIds.length === 0) return [];
+        if (selectedBatchIds.length === 0) return [];
         return subjects
-            .filter(s => selectedDepartmentIds.includes(s.departmentId))
+            .filter(s => selectedBatchIds.includes(s.batchId))
             .sort((a, b) => {
                 const codeA = (a.paperCode || a.code || '').toLowerCase();
                 const codeB = (b.paperCode || b.code || '').toLowerCase();
                 return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
             });
-    }, [subjects, selectedDepartmentIds]);
+    }, [subjects, selectedBatchIds]);
 
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
@@ -138,25 +139,25 @@ export default function TeachersPage() {
                 setTeachers(JSON.parse(cachedTeachers));
                 setLoading(false);
             }
-            const cachedDepts = sessionStorage.getItem('cache_departments');
-            if (cachedDepts) setDepartments(JSON.parse(cachedDepts));
+            const cachedDepts = sessionStorage.getItem('cache_batches');
+            if (cachedDepts) setBatches(JSON.parse(cachedDepts));
             const cachedSubjects = sessionStorage.getItem('cache_subjects');
             if (cachedSubjects) setSubjects(JSON.parse(cachedSubjects));
         } catch { /* ignore cache errors */ }
 
         fetchTeachers(token);
-        fetchDepartments(token);
+        fetchBatches(token);
         fetchSubjects(token);
     }, [router]);
 
     // Real-time updates: silently re-fetch when DB tables change
     useRealtimeData({
-        tables: ['users', 'teacher_subjects', 'teacher_departments', 'departments', 'subjects'],
+        tables: ['users', 'teacher_subjects', 'teacher_batches', 'batches', 'subjects'],
         onTableChange: useCallback(() => {
             const token = localStorage.getItem('token');
             if (token) {
                 fetchTeachers(token);
-                fetchDepartments(token);
+                fetchBatches(token);
                 fetchSubjects(token);
             }
         }, []),
@@ -182,18 +183,18 @@ export default function TeachersPage() {
         setLoading(false);
     };
 
-    const fetchDepartments = async (token: string) => {
+    const fetchBatches = async (token: string) => {
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 cache: 'no-store',
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const deptsList = data.departments || [];
-            setDepartments(deptsList);
-            try { sessionStorage.setItem('cache_departments', JSON.stringify(deptsList)); } catch {}
+            const deptsList = data.batches || [];
+            setBatches(deptsList);
+            try { sessionStorage.setItem('cache_batches', JSON.stringify(deptsList)); } catch {}
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
         }
     };
 
@@ -219,10 +220,10 @@ export default function TeachersPage() {
     };
 
     const resetForm = () => {
-        // For HOD users, auto-set their departmentId
-        const defaultDeptIds = user?.role === 'super_admin' && user.departmentId ? [user.departmentId] : [];
+        // For HOD users, auto-set their batchId
+        const defaultDeptIds = user?.role === 'super_admin' && user.batchId ? [user.batchId] : [];
         setFormData({ name: '', email: '', role: 'teacher', password: '' });
-        setSelectedDepartmentIds(defaultDeptIds);
+        setSelectedBatchIds(defaultDeptIds);
         setSelectedSubjectKeys([]);
         setSelectedTeacherId(null);
         setEnablePasswordUpdate(false);
@@ -230,13 +231,13 @@ export default function TeachersPage() {
         setSuccess('');
     };
 
-    const handleDepartmentToggle = (deptId: string) => {
-        setSelectedDepartmentIds(prev => {
+    const handleBatchToggle = (deptId: string) => {
+        setSelectedBatchIds(prev => {
             if (prev.includes(deptId)) {
-                // Remove department and also remove subjects from that department
+                // Remove batch and also remove subjects from that batch
                 const newDepts = prev.filter(id => id !== deptId);
                 const deptSubjectIds = subjects
-                    .filter(s => s.departmentId === deptId)
+                    .filter(s => s.batchId === deptId)
                     .map(s => s.id);
                 setSelectedSubjectKeys(prevSubs => prevSubs.filter(k => !deptSubjectIds.includes(k)));
                 return newDepts;
@@ -265,16 +266,16 @@ export default function TeachersPage() {
         });
         setEnablePasswordUpdate(false);
 
-        // Set selected departments
+        // Set selected batches
         const deptIds: string[] = [];
-        if (teacher.departments && teacher.departments.length > 0) {
+        if (teacher.batches && teacher.batches.length > 0) {
             // Sort to put primary first
-            const sorted = [...teacher.departments].sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
+            const sorted = [...teacher.batches].sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0));
             deptIds.push(...sorted.map(d => d.id));
-        } else if (teacher.department_id) {
-            deptIds.push(teacher.department_id);
+        } else if (teacher.batch_id) {
+            deptIds.push(teacher.batch_id);
         }
-        setSelectedDepartmentIds(deptIds);
+        setSelectedBatchIds(deptIds);
 
         // Set selected subjects (now using subject IDs directly)
         if (teacher.subjects && teacher.subjects.length > 0) {
@@ -296,7 +297,7 @@ export default function TeachersPage() {
         setSuccess('');
         const token = localStorage.getItem('token');
 
-        if (selectedDepartmentIds.length === 0) {
+        if (selectedBatchIds.length === 0) {
             setError('Please select at least one batch');
             return;
         }
@@ -319,7 +320,7 @@ export default function TeachersPage() {
                             email: formData.email,
                             role: formData.role,
                             password: formData.password || undefined,
-                            departmentIds: selectedDepartmentIds
+                            batchIds: selectedBatchIds
                         };
                     })()),
                 });
@@ -349,7 +350,7 @@ export default function TeachersPage() {
                             email: formData.email,
                             role: formData.role,
                             password: formData.password || undefined,
-                            departmentIds: selectedDepartmentIds
+                            batchIds: selectedBatchIds
                         };
                     })()),
                 });
@@ -446,8 +447,7 @@ export default function TeachersPage() {
             'first name': 'name', 'firstname': 'name', 'name': 'name', 'first_name': 'name', 'first_name*': 'name',
             'full name': 'name', 'fullname': 'name', 'teacher name': 'name', 'name*': 'name',
             'last name': 'last_name', 'lastname': 'last_name', 'surname': 'last_name', 'last_name': 'last_name', 'last_name*': 'last_name',
-            'department': 'department_code', 'dept': 'department_code', 'department code': 'department_code', 'department_code': 'department_code', 'department_code*': 'department_code',
-            'batch_code': 'department_code', 'batch code': 'department_code', 'batch_code*': 'department_code', 'batch': 'department_code',
+            'batch': 'batch_code', 'dept': 'batch_code', 'batch code': 'batch_code', 'batch_code': 'batch_code', 'batch_code*': 'batch_code',
             'role': 'role', 'position': 'role', 'type': 'role', 'role*': 'role',
             'password': 'password', 'pass': 'password',
             'subjects': 'subject_codes', 'subject codes': 'subject_codes', 'subject_codes': 'subject_codes', 'assigned subjects': 'subject_codes'
@@ -619,9 +619,8 @@ export default function TeachersPage() {
     const isSuperAdmin = user?.role === 'super_admin';
     const canManage = user?.role === 'super_admin';
 
-    // Teachers cannot access this page
-    if (user?.role === 'teacher') {
-        return <AccessDenied message="Teachers do not have access to the Teachers page." />;
+    if (user?.role !== 'super_admin') {
+        return <AccessDenied message="Only admins have access to the Teachers page." />;
     }
 
     const filteredTeachers = teachers.filter(teacher => {
@@ -629,13 +628,13 @@ export default function TeachersPage() {
             (teacher.first_name + ' ' + teacher.last_name).toLowerCase().includes(searchTerm.toLowerCase()) ||
             teacher.email.toLowerCase().includes(searchTerm.toLowerCase());
 
-        if (!filterDepartmentId) return matchesSearch;
+        if (!filterBatchId) return matchesSearch;
 
-        // Check primary department
-        if (teacher.department_id === filterDepartmentId) return matchesSearch;
+        // Check primary batch
+        if (teacher.batch_id === filterBatchId) return matchesSearch;
 
-        // Check additional departments
-        if (teacher.departments?.some(d => d.id === filterDepartmentId)) return matchesSearch;
+        // Check additional batches
+        if (teacher.batches?.some(d => d.id === filterBatchId)) return matchesSearch;
 
         return false;
     });
@@ -694,16 +693,16 @@ export default function TeachersPage() {
 
                 {/* Filter and Search Bar */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
-                    {/* Department Filter (Admin only) */}
+                    {/* Batch Filter (Admin only) */}
                     {isSuperAdmin && (
                         <div className="md:col-span-3 relative">
                             <select
                                 className="w-full bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all appearance-none cursor-pointer"
-                                value={filterDepartmentId}
-                                onChange={(e) => setFilterDepartmentId(e.target.value)}
+                                value={filterBatchId}
+                                onChange={(e) => setFilterBatchId(e.target.value)}
                             >
-                                <option value="">All Departments</option>
-                                {departments.map((dept) => (
+                                <option value="">All Batches</option>
+                                {batches.map((dept) => (
                                     <option key={dept.id} value={dept.id}>
                                         {dept.name} ({dept.code})
                                     </option>
@@ -766,8 +765,8 @@ export default function TeachersPage() {
                                                                     HOD
                                                                 </span>
                                                             )}
-                                                            {teacher.departments && teacher.departments.length > 0 ? (
-                                                                teacher.departments.map((dept, idx) => (
+                                                            {teacher.batches && teacher.batches.length > 0 ? (
+                                                                teacher.batches.map((dept, idx) => (
                                                                     <span
                                                                         key={idx}
                                                                         className={`px-2 py-0.5 rounded text-[10px] font-medium ${dept.is_primary
@@ -778,9 +777,9 @@ export default function TeachersPage() {
                                                                         {dept.code}
                                                                     </span>
                                                                 ))
-                                                            ) : teacher.department_code && (
+                                                            ) : teacher.batch_code && (
                                                                 <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-medium border border-purple-100">
-                                                                    {teacher.department_code}
+                                                                    {teacher.batch_code}
                                                                 </span>
                                                             )}
                                                         </div>
@@ -839,7 +838,7 @@ export default function TeachersPage() {
                                             <div>
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <h3 className="font-semibold text-gray-900">{teacher.first_name} {teacher.last_name}</h3>
-                                                    {teacher.departments?.map((dept, idx) => (
+                                                    {teacher.batches?.map((dept, idx) => (
                                                         <span
                                                             key={idx}
                                                             className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${dept.is_primary ? 'bg-purple-50 text-purple-700 border-purple-100' : 'bg-gray-50 text-gray-600 border-gray-100'}`}
@@ -1021,7 +1020,7 @@ export default function TeachersPage() {
                                     </p>
 
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                                        {departments
+                                        {batches
                                             // Admin sees all active batches
                                             .filter(d => d.status !== 'completed')
                                             .map(dept => {
@@ -1033,7 +1032,7 @@ export default function TeachersPage() {
                                                         className={`
                                                     relative flex items-center justify-center p-3 rounded-xl border border-dashed transition-all
                                                     ${isOtherDept ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}
-                                                    ${selectedDepartmentIds.includes(dept.id)
+                                                    ${selectedBatchIds.includes(dept.id)
                                                                 ? 'bg-blue-50 border-blue-500 text-blue-700 font-medium'
                                                                 : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'}
                                                 `}
@@ -1041,12 +1040,12 @@ export default function TeachersPage() {
                                                         <input
                                                             type="checkbox"
                                                             className="absolute opacity-0 w-full h-full cursor-pointer"
-                                                            checked={selectedDepartmentIds.includes(dept.id)}
-                                                            onChange={() => handleDepartmentToggle(dept.id)}
-                                                            disabled={isOtherDept} // HOD can't toggle other departments
+                                                            checked={selectedBatchIds.includes(dept.id)}
+                                                            onChange={() => handleBatchToggle(dept.id)}
+                                                            disabled={isOtherDept} // HOD can't toggle other batches
                                                         />
                                                         <span className="text-sm sm:text-xs text-center">{dept.name} ({dept.code})</span>
-                                                        {selectedDepartmentIds.includes(dept.id) && (
+                                                        {selectedBatchIds.includes(dept.id) && (
                                                             <div className="absolute top-1 right-1">
                                                                 <CheckCircle2 className="w-3 h-3 text-blue-600" />
                                                             </div>
@@ -1060,7 +1059,7 @@ export default function TeachersPage() {
                                                 )
                                             })}
                                     </div>
-                                    {selectedDepartmentIds.length === 0 && (
+                                    {selectedBatchIds.length === 0 && (
                                         <p className="text-red-500 text-xs">Please select at least one batch.</p>
                                     )}
                                 </div>
@@ -1113,7 +1112,7 @@ export default function TeachersPage() {
                                             {teachers.find(t => t.id === selectedTeacherId)!.archived_subjects!.map((subject) => {
                                                 const assignedDate = new Date(subject.assignedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
                                                 const unassignedDate = new Date(subject.unassignedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-                                                const dept = departments.find(d => d.id === subject.departmentId);
+                                                const dept = batches.find(d => d.id === subject.batchId);
                                                 
                                                 return (
                                                     <div

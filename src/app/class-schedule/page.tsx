@@ -20,7 +20,8 @@ interface User {
     role: 'super_admin' | 'teacher';
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -42,9 +43,9 @@ interface Teacher {
     first_name: string;
     last_name: string;
     email: string;
-    department_id: string;
+    batch_id: string;
     subjects: TeacherSubject[];
-    departments: { id: string; code: string }[];
+    batches: { id: string; code: string }[];
 }
 
 interface TimeSlot {
@@ -58,7 +59,7 @@ interface Assignment {
     slot_number: number;
     teacher_id: string;
     subject_id: string;
-    department_id?: string;
+    batch_id?: string;
 }
 
 // Cell key: dept-semester-slot
@@ -71,11 +72,11 @@ export default function ClassSchedulePage() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // Data
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [allTeachers, setAllTeachers] = useState<Teacher[]>([]);
     const [batchConfig, setBatchConfig] = useState<Record<string, Record<string, number>>>({});
 
-    // Time slots (shared across departments)
+    // Time slots (shared across batches)
     const [timeSlots, setTimeSlots] = useState<TimeSlot[]>(
         Array.from({ length: 6 }, (_, i) => ({ slotNumber: i + 1, startTime: '', endTime: '' }))
     );
@@ -123,9 +124,9 @@ export default function ClassSchedulePage() {
 
         (async () => {
             try {
-                // Fetch departments, teachers, batch config in parallel
+                // Fetch batches, teachers, batch config in parallel
                 const [deptRes, teacherRes, batchRes, holidayRes] = await Promise.all([
-                    fetch('/api/me/departments', { headers: { Authorization: `Bearer ${token}` } }),
+                    fetch('/api/me/batches', { headers: { Authorization: `Bearer ${token}` } }),
                     fetch('/api/teachers', { headers: { Authorization: `Bearer ${token}` } }),
                     fetch('/api/settings/batch-config', { headers: { Authorization: `Bearer ${token}` } }),
                     fetch('/api/holidays', { headers: { Authorization: `Bearer ${token}` } }),
@@ -160,9 +161,9 @@ export default function ClassSchedulePage() {
                 if (deptRes.status === 401) { router.replace('/login'); return; }
 
                 const deptData = await deptRes.json();
-                const depts: Department[] = deptData.departments || [];
-                setDepartments(depts);
-                try { sessionStorage.setItem('cache_departments', JSON.stringify(depts)); } catch {}
+                const depts: Batch[] = deptData.batches || [];
+                setBatches(depts);
+                try { sessionStorage.setItem('cache_batches', JSON.stringify(depts)); } catch {}
 
                 if (teacherRes.ok) {
                     const teacherData = await teacherRes.json();
@@ -176,10 +177,10 @@ export default function ClassSchedulePage() {
                     try { sessionStorage.setItem('cache_batch_config', JSON.stringify(batchData.mappings || {})); } catch {}
                 }
 
-                // Fetch time slots (use first department's config)
+                // Fetch time slots (use first batch's config)
                 if (depts.length > 0) {
                     const timeRes = await fetch(
-                        `/api/class-schedule/time-slots?departmentId=${depts[0].id}`,
+                        `/api/class-schedule/time-slots?batchId=${depts[0].id}`,
                         { headers: { Authorization: `Bearer ${token}` } }
                     );
                     if (timeRes.ok) {
@@ -208,10 +209,10 @@ export default function ClassSchedulePage() {
 
                             // If today is a holiday, auto-cleanup existing assignments
                             if (isHoliday && rawAssignments.length > 0) {
-                                // Delete all assignments for today across all departments
+                                // Delete all assignments for today across all batches
                                 await Promise.all(depts.map(dept =>
                                     fetch(
-                                        `/api/class-schedule/assignments?departmentId=${dept.id}&date=${today}`,
+                                        `/api/class-schedule/assignments?batchId=${dept.id}&date=${today}`,
                                         { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
                                     )
                                 ));
@@ -219,7 +220,7 @@ export default function ClassSchedulePage() {
                             } else {
                                 const assignmentMap = new Map<string, { teacherId: string; subjectId: string }>();
                                 rawAssignments.forEach((a: any) => {
-                                    const dId = a.department_id || depts[0].id;
+                                    const dId = a.batch_id || depts[0].id;
                                     assignmentMap.set(cellKey(dId, a.semester, a.slot_number), {
                                         teacherId: a.teacher_id,
                                         subjectId: a.subject_id,
@@ -265,7 +266,7 @@ export default function ClassSchedulePage() {
                         const data = await assRes.json();
                         const map = new Map<string, { teacherId: string; subjectId: string }>();
                         (data.assignments || []).forEach((a: any) => {
-                            const dId = a.department_id || departments[0]?.id;
+                            const dId = a.batch_id || batches[0]?.id;
                             map.set(cellKey(dId, a.semester, a.slot_number), {
                                 teacherId: a.teacher_id,
                                 subjectId: a.subject_id,
@@ -277,7 +278,7 @@ export default function ClassSchedulePage() {
                     console.error('Realtime refresh error:', err);
                 }
             })();
-        }, [user, today, departments]),
+        }, [user, today, batches]),
     });
 
     // Batch label helpers
@@ -304,11 +305,11 @@ export default function ClassSchedulePage() {
         return !!savedMappings[sem.toString()];
     };
 
-    // Build semester rows: union of all departments' active semesters
-    // Each semester has sub-rows per department
+    // Build semester rows: union of all batches' active semesters
+    // Each semester has sub-rows per batch
     const semesterRows = (() => {
         const allSemesters = new Set<number>();
-        departments.forEach(dept => {
+        batches.forEach(dept => {
             const maxSem = (dept.deptType === 'vocational' || dept.deptType === 'pg') ? 6 : 8;
             for (let s = 1; s <= maxSem; s++) {
                 if (isSemesterActive(s, dept.deptType)) {
@@ -319,9 +320,9 @@ export default function ClassSchedulePage() {
         return Array.from(allSemesters).sort((a, b) => a - b);
     })();
 
-    // Get departments that have a given semester active (Sorted alphabetically by code)
-    const getDepartmentsForSemester = (sem: number): Department[] => {
-        return departments.filter(dept => {
+    // Get batches that have a given semester active (Sorted alphabetically by code)
+    const getBatchesForSemester = (sem: number): Batch[] => {
+        return batches.filter(dept => {
             const maxSem = (dept.deptType === 'vocational' || dept.deptType === 'pg') ? 6 : 8;
             return sem <= maxSem && isSemesterActive(sem, dept.deptType);
         }).sort((a, b) => a.code.localeCompare(b.code));
@@ -332,16 +333,16 @@ export default function ClassSchedulePage() {
     // Minutes mapping
     const mins = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
 
-    // Get teachers for a specific department
+    // Get teachers for a specific batch
     const getTeachersForDept = (deptId: string): Teacher[] => {
         return allTeachers.filter((t: any) => {
-            if (t.department_id === deptId) return true;
-            if (t.departments && t.departments.some((d: any) => d.id === deptId)) return true;
+            if (t.batch_id === deptId) return true;
+            if (t.batches && t.batches.some((d: any) => d.id === deptId)) return true;
             return false;
         });
     };
 
-    // Get teachers for a department+semester (filtered by subject match)
+    // Get teachers for a batch+semester (filtered by subject match)
     const getTeachersForDeptSemester = (deptId: string, semester: number): Teacher[] => {
         return getTeachersForDept(deptId).filter(t => {
             if (!t.subjects) return false;
@@ -349,12 +350,12 @@ export default function ClassSchedulePage() {
         });
     };
 
-    // Get teacher's subjects for a semester, filtering by department's degree type if possible
+    // Get teacher's subjects for a semester, filtering by batch's degree type if possible
     const getTeacherSubjectsForSemester = (teacherId: string, semester: number, deptId: string): TeacherSubject[] => {
         const teacher = allTeachers.find(t => t.id === teacherId);
         if (!teacher || !teacher.subjects) return [];
         
-        const dept = departments.find(d => d.id === deptId);
+        const dept = batches.find(d => d.id === deptId);
         
         return teacher.subjects.filter(s => {
             if (!s.semesters || !s.semesters.includes(semester)) return false;
@@ -407,7 +408,7 @@ export default function ClassSchedulePage() {
     // Auto-save time slots with debounce (only after user edits)
     useEffect(() => {
         if (!userEditedTimes.current) return;
-        if (departments.length === 0) return;
+        if (batches.length === 0) return;
 
         const hasValidSlot = timeSlots.some(s => s.startTime && s.endTime);
         if (!hasValidSlot) return;
@@ -423,10 +424,10 @@ export default function ClassSchedulePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [timeSlots]);
 
-    // Save time slots to ALL departments
+    // Save time slots to ALL batches
     const saveTimeSlots = async () => {
         const token = localStorage.getItem('token');
-        if (!token || departments.length === 0) return;
+        if (!token || batches.length === 0) return;
 
         const currentSlots = timeSlotsRef.current;
         const validSlots = currentSlots
@@ -437,11 +438,11 @@ export default function ClassSchedulePage() {
 
         setSavingTimes(true);
         try {
-            await Promise.all(departments.map(dept =>
+            await Promise.all(batches.map(dept =>
                 fetch('/api/class-schedule/time-slots', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ departmentId: dept.id, slots: validSlots }),
+                    body: JSON.stringify({ batchId: dept.id, slots: validSlots }),
                 })
             ));
         } catch (err) {
@@ -480,7 +481,7 @@ export default function ClassSchedulePage() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({
-                    departmentId: deptId,
+                    batchId: deptId,
                     date: today,
                     assignments: [{ semester, slotNumber, teacherId, subjectId }],
                 }),
@@ -505,7 +506,7 @@ export default function ClassSchedulePage() {
 
         try {
             await fetch(
-                `/api/class-schedule/assignments?departmentId=${deptId}&date=${today}&semester=${semester}&slotNumber=${slotNumber}`,
+                `/api/class-schedule/assignments?batchId=${deptId}&date=${today}&semester=${semester}&slotNumber=${slotNumber}`,
                 { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
             );
         } catch (err) {
@@ -538,7 +539,7 @@ export default function ClassSchedulePage() {
                 rowsHtml += `<tr><td colspan="${displaySlots.length + 1}" style="background: #e2e8f0; height: 12px; padding: 0; border-top: 1px solid #cbd5e1; border-bottom: 1px solid #cbd5e1;"></td></tr>`;
             }
             
-            const deptsForSem = getDepartmentsForSemester(sem);
+            const deptsForSem = getBatchesForSemester(sem);
             deptsForSem.forEach((dept, deptIdx) => {
                 const isFirstDeptRow = deptIdx === 0;
                 rowsHtml += `<tr>`;
@@ -546,7 +547,7 @@ export default function ClassSchedulePage() {
                 // Semester Col
                 rowsHtml += `<td style="background: ${isFirstDeptRow ? '#ffffff' : '#f8fafc'};">
                     ${isFirstDeptRow ? `<strong style="font-size: 13px;">Sem-0${sem}</strong><br><small style="color: #4f46e5; font-weight: bold;">${getBatchLabel(sem, dept.deptType)}</small>` : ''}
-                    ${departments.length > 1 ? `<div style="margin-top: 4px;"><span class="dept-badge">${dept.code}</span></div>` : ''}
+                    ${batches.length > 1 ? `<div style="margin-top: 4px;"><span class="dept-badge">${dept.code}</span></div>` : ''}
                 </td>`;
 
                 // Slots Col
@@ -627,7 +628,7 @@ export default function ClassSchedulePage() {
     <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; font-size: 10px; color: #64748b;">
         <div>
             <span style="font-weight: 700; color: #334155;">Generated by:</span>
-            <span style="margin-left: 4px; font-weight: 600;">${user?.role === 'super_admin' ? 'Admin' : 'HOD'}${departments.length > 0 ? ` (${departments.map(d => d.code).join(', ')})` : ''} — ${user?.firstName} ${user?.lastName}</span>
+            <span style="margin-left: 4px; font-weight: 600;">${user?.role === 'super_admin' ? 'Admin' : 'HOD'}${batches.length > 0 ? ` (${batches.map(d => d.code).join(', ')})` : ''} — ${user?.firstName} ${user?.lastName}</span>
         </div>
         <div style="font-style: italic;">Auto-generated on ${new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</div>
     </div>
@@ -672,9 +673,9 @@ export default function ClassSchedulePage() {
                                 <p className="text-sm text-gray-500 font-medium">
                                     {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                                 </p>
-                                {departments.length > 1 && (
+                                {batches.length > 1 && (
                                     <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-bold text-teal-700 bg-teal-50 border border-teal-100">
-                                        {departments.map(d => d.code).join(', ')}
+                                        {batches.map(d => d.code).join(', ')}
                                     </span>
                                 )}
                             </div>
@@ -824,8 +825,8 @@ export default function ClassSchedulePage() {
                                         </tr>
                                     </thead>
                                     {semesterRows.map((sem, semIndex) => {
-                                        const deptsForSem = getDepartmentsForSemester(sem);
-                                        const showMultipleDepts = departments.length > 1;
+                                        const deptsForSem = getBatchesForSemester(sem);
+                                        const showMultipleDepts = batches.length > 1;
 
                                         return (
                                             <tbody key={`sem-body-${sem}`} className="bg-white divide-y divide-slate-100">

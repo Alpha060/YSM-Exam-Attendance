@@ -22,7 +22,7 @@ const CACHEABLE_API_ROUTES = [
   '/api/teachers',
   '/api/holidays',
   '/api/subjects',
-  '/api/departments',
+  '/api/batches',
   '/api/attendance',
 ];
 

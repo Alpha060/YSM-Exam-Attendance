@@ -8,17 +8,19 @@ import { ArrowLeft, Users, BookOpen, AlertCircle, AlertTriangle, Building2, Tren
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
 import * as XLSX from 'xlsx';
+import { AccessDenied } from '@/components/ui/access-denied';
 
 interface User {
     id: string;
-    role: 'super_admin' | 'teacher';
+    role: 'super_admin' | 'teacher' | 'student';
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -40,8 +42,8 @@ interface StudentAlert {
     attendancePercentage: number;
 }
 
-interface DepartmentData {
-    department: Department & { degreeType: string };
+interface BatchData {
+    batch: Batch & { degreeType: string };
     overallStats: {
         totalStudents: number;
         totalSubjects: number;
@@ -53,13 +55,13 @@ interface DepartmentData {
     warningStudents: StudentAlert[];
 }
 
-export default function DepartmentOverviewPage() {
+export default function BatchOverviewPage() {
     const router = useRouter();
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [departments, setDepartments] = useState<Department[]>([]);
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
-    const [data, setData] = useState<DepartmentData | null>(null);
+    const [batches, setBatches] = useState<Batch[]>([]);
+    const [selectedBatchId, setSelectedBatchId] = useState('');
+    const [data, setData] = useState<BatchData | null>(null);
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'subject' | 'critical' | 'warning'>('subject');
 
@@ -91,71 +93,71 @@ export default function DepartmentOverviewPage() {
         });
 
         if (parsedUser.role === 'super_admin') {
-            fetchDepartments(token);
+            fetchBatches(token);
         } else if (parsedUser.role === 'teacher') {
-            fetchTeacherDepartments(token, parsedUser.id, parsedUser.departmentId);
+            fetchTeacherBatches(token, parsedUser.id, parsedUser.batchId);
         }
     }, [router]);
 
 
 
     useEffect(() => {
-        if (selectedDepartmentId) {
-            fetchDepartmentData();
+        if (selectedBatchId) {
+            fetchBatchData();
         }
-    }, [selectedDepartmentId]);
+    }, [selectedBatchId]);
 
-    const fetchDepartments = async (token: string) => {
+    const fetchBatches = async (token: string) => {
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const result = await res.json();
-            const depts = result.departments || [];
-            setDepartments(depts);
+            const depts = result.batches || [];
+            setBatches(depts);
             if (depts.length > 0) {
-                setSelectedDepartmentId(depts[0].id);
+                setSelectedBatchId(depts[0].id);
             } else {
                 setLoading(false);
             }
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
             setLoading(false);
         }
     };
 
-    const fetchTeacherDepartments = async (token: string, teacherId: string, defaultDeptId?: string) => {
+    const fetchTeacherBatches = async (token: string, teacherId: string, defaultDeptId?: string) => {
         try {
-            const res = await fetch('/api/me/departments', {
+            const res = await fetch('/api/me/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const depts = data.departments || [];
+            const depts = data.batches || [];
             if (depts.length > 0) {
-                setDepartments(depts);
-                if (defaultDeptId && depts.find((d: Department) => d.id === defaultDeptId)) {
-                    setSelectedDepartmentId(defaultDeptId);
+                setBatches(depts);
+                if (defaultDeptId && depts.find((d: Batch) => d.id === defaultDeptId)) {
+                    setSelectedBatchId(defaultDeptId);
                 } else {
-                    setSelectedDepartmentId(depts[0].id);
+                    setSelectedBatchId(depts[0].id);
                 }
             } else {
                 if (defaultDeptId) {
-                    setSelectedDepartmentId(defaultDeptId);
+                    setSelectedBatchId(defaultDeptId);
                 } else {
                     setLoading(false);
                 }
             }
         } catch (err) {
-            console.error('Error fetching teacher departments:', err);
+            console.error('Error fetching teacher batches:', err);
             setLoading(false);
         }
     };
 
-    const fetchDepartmentData = async () => {
+    const fetchBatchData = async () => {
         setLoading(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await fetch(`/api/reports/department?departmentId=${selectedDepartmentId}`, {
+            const res = await fetch(`/api/reports/batch?batchId=${selectedBatchId}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.status === 401) {
@@ -173,7 +175,7 @@ export default function DepartmentOverviewPage() {
                 setData(result);
             }
         } catch (err) {
-            console.error('Error fetching department data:', err);
+            console.error('Error fetching batch data:', err);
             setData(null);
         }
         setLoading(false);
@@ -197,8 +199,8 @@ export default function DepartmentOverviewPage() {
         return 'bg-red-50 border-red-200';
     };
 
-    // Export department data
-    const exportDepartmentData = (format: 'csv' | 'excel') => {
+    // Export batch data
+    const exportBatchData = (format: 'csv' | 'excel') => {
         if (!data) return;
         const headers = ['Category', 'Name', 'Code/Roll', 'Students', 'Attendance %'];
         const rows: string[][] = [];
@@ -218,7 +220,7 @@ export default function DepartmentOverviewPage() {
             rows.push(['Warning Student', s.name, idAndRoll, '-', `${s.attendancePercentage}%`]);
         });
 
-        const filename = `department_${data.department?.name || 'report'}`;
+        const filename = `batch_${data.batch?.name || 'report'}`;
         if (format === 'csv') {
             const csvContent = [headers.join(','), ...rows.map(row => row.map(cell => `"${cell}"`).join(','))].join('\n');
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -231,12 +233,16 @@ export default function DepartmentOverviewPage() {
         } else {
             const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
             const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, 'Department');
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Batch');
             XLSX.writeFile(workbook, `${filename}.xlsx`);
         }
     };
 
     if (!user) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+
+    if (user.role === 'student') {
+        return <AccessDenied message="Students do not have access to academic reports." />;
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -268,26 +274,26 @@ export default function DepartmentOverviewPage() {
                             Batch Overview <span className="inline-block animate-bounce">🏢</span>
                         </h1>
                         <p className="text-rose-100 text-sm max-w-xl">
-                            {data?.department ? data.department.name : 'View detailed performance metrics, subject-wise analysis, and student alerts.'}
+                            {data?.batch ? data.batch.name : 'View detailed performance metrics, subject-wise analysis, and student alerts.'}
                         </p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-                        {/* Department selector */}
+                        {/* Batch selector */}
                         <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-full font-medium text-sm">
                             <Building2 className="w-4 h-4" />
-                            {user?.role === 'super_admin' || departments.length > 1 ? (
+                            {user?.role === 'super_admin' || batches.length > 1 ? (
                                 <select 
                                     className="bg-transparent border-none outline-none cursor-pointer focus:ring-0 text-indigo-700 font-semibold"
-                                    value={selectedDepartmentId}
-                                    onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                    value={selectedBatchId}
+                                    onChange={(e) => setSelectedBatchId(e.target.value)}
                                 >
-                                    {departments.map(d => (
+                                    {batches.map(d => (
                                         <option key={d.id} value={d.id}>{d.name}</option>
                                     ))}
                                 </select>
                             ) : (
-                                <span>{data?.department?.name || 'Batch'}</span>
+                                <span>{data?.batch?.name || 'Batch'}</span>
                             )}
                         </div>
 
@@ -297,7 +303,7 @@ export default function DepartmentOverviewPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-white hover:bg-white/20 hover:text-white h-8 px-3 transition-colors"
-                                onClick={() => exportDepartmentData('excel')}
+                                onClick={() => exportBatchData('excel')}
                             >
                                 <FileSpreadsheet className="w-4 h-4 sm:mr-2" />
                                 <span className="hidden sm:inline">Excel</span>
@@ -306,7 +312,7 @@ export default function DepartmentOverviewPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-white hover:bg-white/20 hover:text-white h-8 px-3 transition-colors"
-                                onClick={() => exportDepartmentData('csv')}
+                                onClick={() => exportBatchData('csv')}
                             >
                                 <FileDown className="w-4 h-4 sm:mr-2" />
                                 <span className="hidden sm:inline">CSV</span>
@@ -318,7 +324,7 @@ export default function DepartmentOverviewPage() {
                 {loading ? (
                     <div className="flex flex-col items-center justify-center h-64 gap-4">
                         <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-                        <p className="text-gray-500">Loading department data...</p>
+                        <p className="text-gray-500">Loading batch data...</p>
                     </div>
                 ) : !data || !data.overallStats ? (
                     <div className="p-12 text-center shadow-xl bg-white/80 backdrop-blur-sm rounded-2xl">
@@ -327,7 +333,7 @@ export default function DepartmentOverviewPage() {
                         </div>
                         <h3 className="text-xl font-semibold text-gray-700 mb-2">No Data Available</h3>
                         <p className="text-gray-500 max-w-md mx-auto">
-                            No attendance data found for this department. Make sure attendance has been marked for students.
+                            No attendance data found for this batch. Make sure attendance has been marked for students.
                         </p>
                     </div>
                 ) : (

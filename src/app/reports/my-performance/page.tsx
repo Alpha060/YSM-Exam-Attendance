@@ -6,15 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Users, Calendar, TrendingUp, BookOpen, Clock, CalendarDays, FileDown } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
+import { AccessDenied } from '@/components/ui/access-denied';
 
 
 interface User {
     id: string;
-    role: 'super_admin' | 'teacher';
+    role: 'super_admin' | 'teacher' | 'student';
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
 interface PerformanceData {
@@ -22,10 +23,10 @@ interface PerformanceData {
         id: string;
         name: string;
         email: string;
-        department: string;
+        batch: string;
     };
     filters: {
-        departments: { id: string; name: string; code: string; deptType?: string }[];
+        batches: { id: string; name: string; code: string; deptType?: string }[];
     };
     summary: {
         totalSessions: number;
@@ -40,7 +41,7 @@ interface PerformanceData {
         name: string;
         code: string;
         paperCode?: string;
-        department: string;
+        batch: string;
         sessions: number;
         workingDays: number;
         students: number;
@@ -103,7 +104,7 @@ export default function MyPerformancePage() {
         try {
             let url = `/api/reports/teachers/${userId}`;
             const params = new URLSearchParams();
-            if (deptFilter) params.append('departmentId', deptFilter);
+            if (deptFilter) params.append('batchId', deptFilter);
             if (dateFrom) params.append('dateFrom', dateFrom);
             if (dateTo) params.append('dateTo', dateTo);
             if (params.toString()) url += '?' + params.toString();
@@ -454,7 +455,7 @@ export default function MyPerformancePage() {
                     <div class="teacher-email">${teacher.email}</div>
                 </div>
                 <div class="meta-values">
-                    <div class="meta-row"><strong>Batch:</strong> ${deptFilter ? data.filters.departments.find(d => d.id === deptFilter)?.name : 'All Batches'}</div>
+                    <div class="meta-row"><strong>Batch:</strong> ${deptFilter ? data.filters.batches.find(d => d.id === deptFilter)?.name : 'All Batches'}</div>
                     ${subjects.length === 1 ? `<div class="meta-row"><strong>Subject:</strong> ${subjects[0].name} (${subjects[0].paperCode || subjects[0].code})</div>` : ''}
                     ${dateFrom || dateTo ? `<div class="meta-row"><strong>Period:</strong> ${dateFrom || 'Start'} to ${dateTo || 'Present'}</div>` : ''}
                     <div class="meta-row"><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
@@ -588,6 +589,12 @@ export default function MyPerformancePage() {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     };
 
+    if (!user) return null;
+
+    if (user.role !== 'teacher') {
+        return <AccessDenied message="Only teachers have access to their performance reports." />;
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
             {user && (
@@ -639,7 +646,7 @@ export default function MyPerformancePage() {
                         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
                             <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Filter Your Data</div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                {data.filters.departments?.length > 0 && (
+                                {data.filters.batches?.length > 0 && (
                                     <div className="flex flex-col gap-1">
                                         <select
                                             value={deptFilter}
@@ -647,7 +654,7 @@ export default function MyPerformancePage() {
                                             className="px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
                                         >
                                             <option value="">All My Batches</option>
-                                            {data.filters.departments.map((dept) => (
+                                            {data.filters.batches.map((dept) => (
                                                 <option key={dept.id} value={dept.id}>{dept.name}</option>
                                             ))}
                                         </select>
@@ -747,7 +754,7 @@ export default function MyPerformancePage() {
                                                 <div className="flex justify-between items-start mb-3">
                                                     <div>
                                                         <h3 className="font-bold text-gray-900">{subject.paperCode || subject.code} - {subject.name}</h3>
-                                                        <p className="text-xs font-medium text-gray-500 mt-0.5">({subject.code}) {subject.department} • {subject.sessions} lectures</p>
+                                                        <p className="text-xs font-medium text-gray-500 mt-0.5">({subject.code}) {subject.batch} • {subject.sessions} lectures</p>
                                                     </div>
                                                     <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm ${getAttendanceColor(subject.attendance)}`}>
                                                         {subject.attendance}%

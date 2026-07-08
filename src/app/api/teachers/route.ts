@@ -8,12 +8,12 @@ interface TeacherRow {
     first_name: string;
     last_name: string;
     role: string;
-    department_id: string | null;
-    department_name?: string;
-    department_code?: string;
+    batch_id: string | null;
+    batch_name?: string;
+    batch_code?: string;
 }
 
-interface DepartmentInfo {
+interface BatchInfo {
     id: string;
     name: string;
     code: string;
@@ -34,12 +34,12 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        // Query teachers with their primary department and subjects
+        // Query teachers with their primary batch and subjects
         let queryText = `
             SELECT 
-                u.id, u.email, u.first_name, u.last_name, u.role, u.department_id, u.created_at, u.updated_at,
-                d.name as department_name, 
-                d.code as department_code,
+                u.id, u.email, u.first_name, u.last_name, u.role, u.batch_id, u.created_at, u.updated_at,
+                d.name as batch_name, 
+                d.code as batch_code,
                 (
                     SELECT COALESCE(json_agg(json_build_object(
                         'assignmentId', ts.id,
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
                         'code', s.code, 
                         'paperCode', s.paper_code,
                         'name', s.name,
-                        'departmentId', s.department_id
+                        'batchId', s.batch_id
                     )), '[]'::json)
                     FROM teacher_subjects ts
                     JOIN subjects s ON ts.subject_id = s.id
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
                         'code', s.code, 
                         'paperCode', s.paper_code,
                         'name', s.name,
-                        'departmentId', s.department_id,
+                        'batchId', s.batch_id,
                         'assignedDate', ts.assigned_date,
                         'unassignedDate', ts.unassigned_date
                     )), '[]'::json)
@@ -77,12 +77,12 @@ export async function GET(request: NextRequest) {
                         'code', dept.code,
                         'is_primary', false
                     )), '[]'::json)
-                    FROM user_departments ud
-                    JOIN departments dept ON ud.department_id = dept.id
-                    WHERE ud.user_id = u.id AND (u.department_id IS NULL OR ud.department_id != u.department_id)
-                ) as additional_departments
+                    FROM user_batches ud
+                    JOIN batches dept ON ud.batch_id = dept.id
+                    WHERE ud.user_id = u.id AND (u.batch_id IS NULL OR ud.batch_id != u.batch_id)
+                ) as additional_batches
             FROM users u
-            LEFT JOIN departments d ON u.department_id = d.id
+            LEFT JOIN batches d ON u.batch_id = d.id
             WHERE u.role IN ('teacher')
         `;
         const params: string[] = [];
@@ -90,46 +90,46 @@ export async function GET(request: NextRequest) {
         // Teachers can only see teachers from their own batches
         if (payload.role === 'teacher' && payload.userId) {
             queryText += ` AND (
-                u.department_id IN (SELECT department_id FROM user_departments WHERE user_id = $1)
-                OR u.department_id = $2
+                u.batch_id IN (SELECT batch_id FROM user_batches WHERE user_id = $1)
+                OR u.batch_id = $2
                 OR EXISTS (
-                    SELECT 1 FROM user_departments ud 
+                    SELECT 1 FROM user_batches ud 
                     WHERE ud.user_id = u.id AND (
-                        ud.department_id IN (SELECT department_id FROM user_departments WHERE user_id = $1)
-                        OR ud.department_id = $2
+                        ud.batch_id IN (SELECT batch_id FROM user_batches WHERE user_id = $1)
+                        OR ud.batch_id = $2
                     )
                 )
             )`;
-            params.push(payload.userId, payload.departmentId || '00000000-0000-0000-0000-000000000000');
+            params.push(payload.userId, payload.batchId || '00000000-0000-0000-0000-000000000000');
         }
         // Super admin sees ALL teachers - no filter needed
 
         queryText += ' ORDER BY u.first_name, u.last_name';
 
-        const teachers = await query<TeacherRow & { subjects: any[]; additional_departments: DepartmentInfo[] }>(queryText, params);
+        const teachers = await query<TeacherRow & { subjects: any[]; additional_batches: BatchInfo[] }>(queryText, params);
 
-        // Transform response to include all departments in a single array
+        // Transform response to include all batches in a single array
         const transformedTeachers = teachers.map(teacher => {
-            const allDepartments: DepartmentInfo[] = [];
+            const allBatches: BatchInfo[] = [];
 
-            // Add primary department first
-            if (teacher.department_id && teacher.department_name && teacher.department_code) {
-                allDepartments.push({
-                    id: teacher.department_id,
-                    name: teacher.department_name,
-                    code: teacher.department_code,
+            // Add primary batch first
+            if (teacher.batch_id && teacher.batch_name && teacher.batch_code) {
+                allBatches.push({
+                    id: teacher.batch_id,
+                    name: teacher.batch_name,
+                    code: teacher.batch_code,
                     is_primary: true
                 });
             }
 
-            // Add additional departments
-            if (teacher.additional_departments && Array.isArray(teacher.additional_departments)) {
-                allDepartments.push(...teacher.additional_departments);
+            // Add additional batches
+            if (teacher.additional_batches && Array.isArray(teacher.additional_batches)) {
+                allBatches.push(...teacher.additional_batches);
             }
 
             return {
                 ...teacher,
-                departments: allDepartments
+                batches: allBatches
             };
         });
 
@@ -154,10 +154,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { firstName, lastName, email, departmentId, departmentIds, role, password } = await request.json();
+        const { firstName, lastName, email, batchId, batchIds, role, password } = await request.json();
 
-        // Support both single departmentId and array of departmentIds
-        const deptIds: string[] = departmentIds || (departmentId ? [departmentId] : []);
+        // Support both single batchId and array of batchIds
+        const deptIds: string[] = batchIds || (batchId ? [batchId] : []);
 
         if (!firstName || !lastName || !email || deptIds.length === 0) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
         const passwordHash = await hashPassword(defaultPassword);
 
         const teachers = await query<TeacherRow>(
-            `INSERT INTO users (first_name, last_name, email, password_hash, role, department_id)
+            `INSERT INTO users (first_name, last_name, email, password_hash, role, batch_id)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING *`,
             [firstName, lastName, email, passwordHash, role || 'teacher', primaryDeptId]
@@ -181,12 +181,12 @@ export async function POST(request: NextRequest) {
 
         const newTeacher = teachers[0];
 
-        // Add all departments to user_departments (including primary for easy querying)
+        // Add all batches to user_batches (including primary for easy querying)
         for (const deptId of deptIds) {
             await query(
-                `INSERT INTO user_departments (user_id, department_id) 
+                `INSERT INTO user_batches (user_id, batch_id) 
                  VALUES ($1, $2) 
-                 ON CONFLICT (user_id, department_id) DO NOTHING`,
+                 ON CONFLICT (user_id, batch_id) DO NOTHING`,
                 [newTeacher.id, deptId]
             );
         }
@@ -232,7 +232,7 @@ export async function DELETE(request: NextRequest) {
 
         // Clean up related records
         await query('DELETE FROM teacher_subjects WHERE teacher_id = $1', [id]);
-        await query('DELETE FROM user_departments WHERE user_id = $1', [id]);
+        await query('DELETE FROM user_batches WHERE user_id = $1', [id]);
 
         // Unlink teacher from attendance records (preserve history)
         await query('UPDATE attendance_records SET teacher_id = NULL WHERE teacher_id = $1', [id]);
@@ -267,14 +267,14 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { id, firstName, lastName, email, departmentId, departmentIds, role, password } = await request.json();
+        const { id, firstName, lastName, email, batchId, batchIds, role, password } = await request.json();
 
         if (!id) {
             return NextResponse.json({ error: 'Teacher ID required' }, { status: 400 });
         }
 
-        // Support both single departmentId and array of departmentIds
-        const deptIds: string[] = departmentIds || (departmentId ? [departmentId] : []);
+        // Support both single batchId and array of batchIds
+        const deptIds: string[] = batchIds || (batchId ? [batchId] : []);
         const primaryDeptId = deptIds.length > 0 ? deptIds[0] : null;
 
         const updateFields: string[] = [];
@@ -284,7 +284,7 @@ export async function PUT(request: NextRequest) {
         if (firstName) { updateFields.push(`first_name = $${++paramCount}`); params.push(firstName); }
         if (lastName !== undefined) { updateFields.push(`last_name = $${++paramCount}`); params.push(lastName); }
         if (email) { updateFields.push(`email = $${++paramCount}`); params.push(email); }
-        if (primaryDeptId) { updateFields.push(`department_id = $${++paramCount}`); params.push(primaryDeptId); }
+        if (primaryDeptId) { updateFields.push(`batch_id = $${++paramCount}`); params.push(primaryDeptId); }
         if (role) { updateFields.push(`role = $${++paramCount}`); params.push(role); }
         if (password) {
             const passwordHash = await hashPassword(password);
@@ -299,17 +299,17 @@ export async function PUT(request: NextRequest) {
             );
         }
 
-        // Update departments if provided
+        // Update batches if provided
         if (deptIds.length > 0) {
-            // Remove all department links first
-            await query('DELETE FROM user_departments WHERE user_id = $1', [id]);
+            // Remove all batch links first
+            await query('DELETE FROM user_batches WHERE user_id = $1', [id]);
 
-            // Add all departments
+            // Add all batches
             for (const deptId of deptIds) {
                 await query(
-                    `INSERT INTO user_departments (user_id, department_id) 
+                    `INSERT INTO user_batches (user_id, batch_id) 
                      VALUES ($1, $2) 
-                     ON CONFLICT (user_id, department_id) DO NOTHING`,
+                     ON CONFLICT (user_id, batch_id) DO NOTHING`,
                     [id, deptId]
                 );
             }

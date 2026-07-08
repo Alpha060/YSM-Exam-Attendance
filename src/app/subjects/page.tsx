@@ -31,13 +31,14 @@ interface Subject {
     code: string;
     paperCode?: string;
     name: string;
-    departmentId: string | null;
-    departmentName: string | null;
-    departmentCode: string | null;
+    batchId: string | null;
+    batchName: string | null;
+    batchCode: string | null;
     credits: number;
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -49,20 +50,20 @@ interface User {
     lastName: string;
     email: string;
     role: 'super_admin' | 'teacher';
-    departmentId?: string;
+    batchId?: string;
 }
 
 export default function SubjectsPage() {
     const router = useRouter();
     const [subjects, setSubjects] = useState<Subject[]>([]);
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<User | null>(null);
     const [showModal, setShowModal] = useState(false);
 
     // Form data
     const [formData, setFormData] = useState({
-        code: '', paperCode: '', name: '', credits: '3', departmentId: ''
+        code: '', paperCode: '', name: '', credits: '3', batchId: ''
     });
 
     const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
@@ -95,26 +96,26 @@ export default function SubjectsPage() {
         // Try loading cached data first for instant display
         try {
             const cachedSubjects = sessionStorage.getItem('cache_subjects');
-            const cachedDepts = sessionStorage.getItem('cache_departments');
+            const cachedDepts = sessionStorage.getItem('cache_batches');
             if (cachedSubjects) {
                 setSubjects(JSON.parse(cachedSubjects));
                 setLoading(false); // Show cached data immediately, no skeleton
             }
-            if (cachedDepts) setDepartments(JSON.parse(cachedDepts));
+            if (cachedDepts) setBatches(JSON.parse(cachedDepts));
         } catch { /* ignore cache errors */ }
 
         fetchSubjects(token);
-        fetchDepartments(token);
+        fetchBatches(token);
     }, [router]);
 
     // Real-time updates
     useRealtimeData({
-        tables: ['subjects', 'departments'],
+        tables: ['subjects', 'batches'],
         onTableChange: () => {
             const token = localStorage.getItem('token');
             if (token) {
                 fetchSubjects(token);
-                fetchDepartments(token);
+                fetchBatches(token);
             }
         },
     });
@@ -138,15 +139,15 @@ export default function SubjectsPage() {
         setLoading(false);
     };
 
-    const fetchDepartments = async (token: string) => {
+    const fetchBatches = async (token: string) => {
         try {
-            const res = await fetch('/api/departments', { headers: { Authorization: `Bearer ${token}` } });
+            const res = await fetch('/api/batches', { headers: { Authorization: `Bearer ${token}` } });
             const data = await res.json();
-            const deptsList = data.departments || [];
-            setDepartments(deptsList);
-            try { sessionStorage.setItem('cache_departments', JSON.stringify(deptsList)); } catch {}
+            const deptsList = data.batches || [];
+            setBatches(deptsList);
+            try { sessionStorage.setItem('cache_batches', JSON.stringify(deptsList)); } catch {}
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
         }
     };
 
@@ -157,7 +158,7 @@ export default function SubjectsPage() {
                 subject.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 subject.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 (subject.paperCode && subject.paperCode.toLowerCase().includes(searchTerm.toLowerCase()));
-            const matchesBatch = !filterBatch || subject.departmentId === filterBatch;
+            const matchesBatch = !filterBatch || subject.batchId === filterBatch;
             return matchesSearch && matchesBatch;
         });
     }, [subjects, searchTerm, filterBatch]);
@@ -168,7 +169,7 @@ export default function SubjectsPage() {
             paperCode: subject.paperCode || '',
             name: subject.name,
             credits: subject.credits.toString(),
-            departmentId: subject.departmentId || ''
+            batchId: subject.batchId || ''
         });
 
         setEditingSubject(subject);
@@ -178,7 +179,7 @@ export default function SubjectsPage() {
     };
 
     const resetForm = () => {
-        setFormData({ code: '', paperCode: '', name: '', credits: '3', departmentId: departments[0]?.id || '' });
+        setFormData({ code: '', paperCode: '', name: '', credits: '3', batchId: batches[0]?.id || '' });
 
         setEditingSubject(null);
         setError('');
@@ -194,7 +195,7 @@ export default function SubjectsPage() {
         const token = localStorage.getItem('token');
 
 
-        if (!formData.departmentId) {
+        if (!formData.batchId) {
             setError('Please select a batch');
             return;
         }
@@ -214,7 +215,7 @@ export default function SubjectsPage() {
                         paperCode: formData.paperCode,
                         name: formData.name,
                         credits: formData.credits,
-                        departmentId: formData.departmentId
+                        batchId: formData.batchId
                     }),
                 });
 
@@ -237,7 +238,7 @@ export default function SubjectsPage() {
                         paperCode: formData.paperCode,
                         name: formData.name,
                         credits: formData.credits,
-                        departmentId: formData.departmentId
+                        batchId: formData.batchId
                     }),
                 });
 
@@ -287,7 +288,7 @@ export default function SubjectsPage() {
             'code': 'code', 'subject code': 'code', 'subject_code': 'code', 'code*': 'code', 'subjectcode': 'code',
             'paper code': 'paper_code', 'paper_code': 'paper_code', 'papercode': 'paper_code',
             'name': 'name', 'subject name': 'name', 'subject_name': 'name', 'name*': 'name', 'subjectname': 'name', 'title': 'name',
-            'batch code': 'batch_code', 'batch_code': 'batch_code', 'batchcode': 'batch_code', 'department_code': 'batch_code', 'department code': 'batch_code',
+            'batch_code': 'batch_code', 'batchcode': 'batch_code', 'batch code': 'batch_code',
             'degree type': 'batch_code', 'degree_type': 'batch_code', 'degreetype': 'batch_code', 'degree_type*': 'batch_code',
             'credits': 'credits', 'credit': 'credits', 'cr': 'credits'
         };
@@ -431,8 +432,8 @@ export default function SubjectsPage() {
 
     if (loading) return <PageSkeleton type="subjects" />;
 
-    if (user?.role === 'teacher') {
-        return <AccessDenied message="Teachers do not have access to the Subjects page." />;
+    if (user?.role !== 'super_admin') {
+        return <AccessDenied message="Only admins have access to the Subjects page." />;
     }
 
     const canManage = user?.role === 'super_admin' || user?.role === 'super_admin';
@@ -495,7 +496,7 @@ export default function SubjectsPage() {
                 <div className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
                     <div className="flex gap-2 w-full md:w-auto">
                         {/* Batch filter */}
-                        {departments.length > 1 && (
+                        {batches.length > 1 && (
                             <div className="relative w-full md:w-auto">
                                 <select
                                     className="w-full md:w-48 bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
@@ -503,7 +504,7 @@ export default function SubjectsPage() {
                                     onChange={(e) => setFilterBatch(e.target.value)}
                                 >
                                     <option value="">All Batches</option>
-                                    {departments.map(d => (
+                                    {batches.map(d => (
                                         <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
                                     ))}
                                 </select>
@@ -580,9 +581,9 @@ export default function SubjectsPage() {
                                                 {subj.paperCode || '-'}
                                             </td>
                                             <td className="px-6 py-4">
-                                                {subj.departmentName ? (
+                                                {subj.batchName ? (
                                                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
-                                                        {subj.departmentName}
+                                                        {subj.batchName}
                                                     </span>
                                                 ) : (
                                                     <span className="text-gray-400 text-sm">-</span>
@@ -663,10 +664,10 @@ export default function SubjectsPage() {
                                         )}
                                     </div>
 
-                                    {subj.departmentName && (
+                                    {subj.batchName && (
                                         <div className="flex flex-wrap gap-2 mt-3">
                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
-                                                {subj.departmentName}
+                                                {subj.batchName}
                                             </span>
                                         </div>
                                     )}
@@ -751,16 +752,16 @@ export default function SubjectsPage() {
 
                                 {/* Batch Selection */}
                                 <div>
-                                    <Label htmlFor="departmentId">Batch *</Label>
+                                    <Label htmlFor="batchId">Batch *</Label>
                                     <select
-                                        id="departmentId"
+                                        id="batchId"
                                         className="w-full p-2 border rounded bg-gradient-to-r from-cyan-50 to-white"
-                                        value={formData.departmentId}
-                                        onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+                                        value={formData.batchId}
+                                        onChange={(e) => setFormData({ ...formData, batchId: e.target.value })}
                                         required
                                     >
                                         <option value="">Select Batch</option>
-                                        {departments
+                                        {batches
                                             .filter(d => d.status !== 'completed')
                                             .map(d => (
                                                 <option key={d.id} value={d.id}>{d.name} ({d.code})</option>

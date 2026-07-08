@@ -6,18 +6,20 @@ import { Button } from '@/components/ui/button';
 import { CalendarDays, TrendingUp, TrendingDown, BarChart3, Filter, ChevronDown, AlertCircle } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
+import { AccessDenied } from '@/components/ui/access-denied';
 
 
 interface User {
     id: string;
-    role: 'super_admin' | 'teacher';
+    role: 'super_admin' | 'teacher' | 'student';
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -48,9 +50,9 @@ function MonthlyReportContent() {
     const viewParam = searchParams.get('view') || '';
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [selectedBatchId, setSelectedBatchId] = useState('');
 
     const [stats, setStats] = useState<MonthlyStats | null>(null);
     const [dailyBreakdown, setDailyBreakdown] = useState<DailyBreakdown[]>([]);
@@ -67,9 +69,9 @@ function MonthlyReportContent() {
         setUser(parsedUser);
 
         if (parsedUser.role === 'super_admin') {
-            fetchDepartments(token);
+            fetchBatches(token);
         } else if (parsedUser.role === 'teacher') {
-            fetchTeacherDepartments(token, parsedUser.id);
+            fetchTeacherBatches(token, parsedUser.id);
         }
     }, [router]);
 
@@ -80,26 +82,26 @@ function MonthlyReportContent() {
     };
 
     useEffect(() => {
-        if (departments.length === 1 && !selectedDepartmentId) {
-            setSelectedDepartmentId(departments[0].id);
+        if (batches.length === 1 && !selectedBatchId) {
+            setSelectedBatchId(batches[0].id);
         }
-    }, [departments, selectedDepartmentId]);
+    }, [batches, selectedBatchId]);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token && user) {
             fetchMonthlyReport(token);
         }
-    }, [selectedMonth, selectedDepartmentId, user]);
+    }, [selectedMonth, selectedBatchId, user]);
 
-    const getCachedDepartments = () => {
+    const getCachedBatches = () => {
         try {
-            const lCache = localStorage.getItem('offline_departments');
+            const lCache = localStorage.getItem('offline_batches');
             if (lCache) {
                 const parsed = JSON.parse(lCache);
                 if (parsed.data && Array.isArray(parsed.data)) return parsed.data;
             }
-            const sCache = sessionStorage.getItem('cache_departments');
+            const sCache = sessionStorage.getItem('cache_batches');
             if (sCache) {
                 const parsed = JSON.parse(sCache);
                 if (Array.isArray(parsed)) return parsed;
@@ -108,44 +110,44 @@ function MonthlyReportContent() {
         return null;
     };
 
-    const fetchDepartments = async (token: string) => {
-        const cached = getCachedDepartments();
-        if (cached && cached.length > 0) setDepartments(cached);
+    const fetchBatches = async (token: string) => {
+        const cached = getCachedBatches();
+        if (cached && cached.length > 0) setBatches(cached);
 
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const depts = data.departments || [];
-            setDepartments(depts);
-            try { sessionStorage.setItem('cache_departments', JSON.stringify(depts)); } catch { }
+            const depts = data.batches || [];
+            setBatches(depts);
+            try { sessionStorage.setItem('cache_batches', JSON.stringify(depts)); } catch { }
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
         }
     };
 
-    const fetchTeacherDepartments = async (token: string, teacherId: string) => {
-        const cached = getCachedDepartments();
-        if (cached && cached.length > 0) setDepartments(cached);
+    const fetchTeacherBatches = async (token: string, teacherId: string) => {
+        const cached = getCachedBatches();
+        if (cached && cached.length > 0) setBatches(cached);
 
         try {
-            const res = await fetch('/api/me/departments', {
+            const res = await fetch('/api/me/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const depts = data.departments || [];
+            const depts = data.batches || [];
             if (depts.length > 0) {
-                setDepartments(depts);
+                setBatches(depts);
                 try {
-                    localStorage.setItem('offline_departments', JSON.stringify({
+                    localStorage.setItem('offline_batches', JSON.stringify({
                         timestamp: Date.now(),
                         data: depts
                     }));
                 } catch { /* ignore */ }
             }
         } catch (err) {
-            console.error('Error fetching teacher departments:', err);
+            console.error('Error fetching teacher batches:', err);
         }
     };
 
@@ -153,7 +155,7 @@ function MonthlyReportContent() {
         setLoading(true);
         try {
             let url = `/api/reports/monthly?month=${selectedMonth}`;
-            if (selectedDepartmentId) url += `&departmentId=${selectedDepartmentId}`;
+            if (selectedBatchId) url += `&batchId=${selectedBatchId}`;
             if (viewParam) url += `&view=${viewParam}`;
 
             const res = await fetch(url, {
@@ -189,6 +191,12 @@ function MonthlyReportContent() {
         return 'bg-red-500';
     };
 
+    if (!user) return null;
+
+    if (user.role === 'student') {
+        return <AccessDenied message="Students do not have access to academic reports." />;
+    }
+
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
             {user && (
@@ -214,7 +222,7 @@ function MonthlyReportContent() {
                                 Monthly Summary <span className="inline-block animate-wave">📈</span>
                             </h1>
                             <p className="text-emerald-100 text-sm max-w-xl">
-                                Analyze attendance trends, identify patterns, and <span className="font-semibold text-white">monitor overall departmental performance</span>.
+                                Analyze attendance trends, identify patterns, and <span className="font-semibold text-white">monitor overall batchal performance</span>.
                             </p>
                         </div>
                     </div>
@@ -238,17 +246,17 @@ function MonthlyReportContent() {
                                 />
                             </div>
 
-                            {(user?.role === 'super_admin' || departments.length > 1) && (
+                            {(user?.role === 'super_admin' || batches.length > 1) && (
                                 <div className="w-full">
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                     <div className="relative">
                                         <select
-                                            value={selectedDepartmentId}
-                                            onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                            value={selectedBatchId}
+                                            onChange={(e) => setSelectedBatchId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-emerald-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
                                             <option value="">All Batches</option>
-                                            {departments.map((dept) => (
+                                            {batches.map((dept) => (
                                                 <option key={dept.id} value={dept.id}>{dept.name}</option>
                                             ))}
                                         </select>
@@ -262,7 +270,7 @@ function MonthlyReportContent() {
                                     variant="outline"
                                     className="w-full lg:w-auto mt-6 bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 border-gray-200 hover:border-red-200 rounded-xl transition-colors h-[42px]"
                                     onClick={() => {
-                                        setSelectedDepartmentId('');
+                                        setSelectedBatchId('');
                                         setSelectedMonth(new Date().toISOString().slice(0, 7));
                                     }}
                                 >

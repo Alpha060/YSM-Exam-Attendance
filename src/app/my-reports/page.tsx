@@ -15,7 +15,7 @@ interface User {
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
 interface AttendanceStats {

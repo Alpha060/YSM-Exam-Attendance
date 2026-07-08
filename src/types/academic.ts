@@ -1,7 +1,8 @@
-export interface Department {
+export interface Batch {
     id: string;
     name: string;
     code: string;
+    status: string;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -14,7 +15,7 @@ export interface Student {
     firstName: string;
     lastName: string;
     email: string | null;
-    departmentId: string;
+    batchId: string;
     currentSemester: number;
     batchYear: number;
     isActive: boolean;
@@ -26,7 +27,7 @@ export interface Subject {
     id: string;
     code: string;
     name: string;
-    departmentId: string;
+    batchId: string;
     credits: number;
     createdAt: Date;
     updatedAt: Date;

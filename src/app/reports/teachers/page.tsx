@@ -8,18 +8,20 @@ import { Search, X, Users, BookOpen, TrendingUp, Filter, ChevronRight, FileDown,
 import { Input } from '@/components/ui/input';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
+import { AccessDenied } from '@/components/ui/access-denied';
 
 import * as XLSX from 'xlsx';
 
 interface User {
-    role: 'super_admin' | 'teacher';
+    role: 'super_admin' | 'teacher' | 'student';
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -29,7 +31,7 @@ interface TeacherAttendance {
     id: string;
     name: string;
     email: string;
-    department: string;
+    batch: string;
     subjects: string;
     totalSessions: number;
     workingDays: number;
@@ -41,10 +43,10 @@ interface TeacherDetail {
         id: string;
         name: string;
         email: string;
-        department: string;
+        batch: string;
     };
     filters: {
-        departments: { id: string; name: string; code: string; deptType?: string }[];
+        batches: { id: string; name: string; code: string; deptType?: string }[];
     };
     summary: {
         totalSessions: number;
@@ -59,7 +61,7 @@ interface TeacherDetail {
         name: string;
         code: string;
         paperCode?: string;
-        department: string;
+        batch: string;
         sessions: number;
         workingDays: number;
         students: number;
@@ -84,10 +86,10 @@ export default function TeacherReportPage() {
     const router = useRouter();
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [teachers, setTeachers] = useState<TeacherAttendance[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [selectedBatchId, setSelectedBatchId] = useState('');
     const [batchStatusFilter, setBatchStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
     const [showSearch, setShowSearch] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -126,7 +128,7 @@ export default function TeacherReportPage() {
         });
 
         if (parsedUser.role !== 'teacher') {
-            fetchDepartments(token);
+            fetchBatches(token);
         }
     }, [router]);
 
@@ -135,7 +137,7 @@ export default function TeacherReportPage() {
         if (token && user) {
             fetchTeacherReport(token);
         }
-    }, [selectedDepartmentId, user, batchStatusFilter]);
+    }, [selectedBatchId, user, batchStatusFilter]);
 
     useEffect(() => {
         if (selectedTeacherId) {
@@ -143,15 +145,15 @@ export default function TeacherReportPage() {
         }
     }, [popupDeptFilter, popupDateFrom, popupDateTo]);
 
-    const fetchDepartments = async (token: string) => {
+    const fetchBatches = async (token: string) => {
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            setDepartments(data.departments || []);
+            setBatches(data.batches || []);
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
         }
     };
 
@@ -160,7 +162,7 @@ export default function TeacherReportPage() {
         try {
             let url = '/api/reports/teachers';
             const params = new URLSearchParams();
-            if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
+            if (selectedBatchId) params.append('batchId', selectedBatchId);
             if (batchStatusFilter) params.append('batchStatus', batchStatusFilter);
             
             if (params.toString()) {
@@ -190,7 +192,7 @@ export default function TeacherReportPage() {
             const token = localStorage.getItem('token');
             let url = `/api/reports/teachers/${teacherId}`;
             const params = new URLSearchParams();
-            if (deptId) params.append('departmentId', deptId);
+            if (deptId) params.append('batchId', deptId);
             if (dateFrom) params.append('dateFrom', dateFrom);
             if (dateTo) params.append('dateTo', dateTo);
             if (params.toString()) url += '?' + params.toString();
@@ -207,7 +209,7 @@ export default function TeacherReportPage() {
             // Guard: only set if API returned a valid teacher object
             if (!res.ok || !data.teacher) {
                 console.error('Teacher detail API error:', data.error || 'Unknown error');
-                setSelectedTeacher({ teacher: null as any, filters: { departments: [] }, summary: { totalSessions: 0, workingDays: 0, totalStudents: 0, presentCount: 0, absentCount: 0, averageAttendance: 0 }, subjects: [], monthlyTrend: [], dailyBreakdown: [] });
+                setSelectedTeacher({ teacher: null as any, filters: { batches: [] }, summary: { totalSessions: 0, workingDays: 0, totalStudents: 0, presentCount: 0, absentCount: 0, averageAttendance: 0 }, subjects: [], monthlyTrend: [], dailyBreakdown: [] });
             } else {
                 setSelectedTeacher(data);
             }
@@ -555,7 +557,7 @@ export default function TeacherReportPage() {
                     <div class="teacher-email">${teacher.email}</div>
                 </div>
                 <div class="meta-values">
-                    <div class="meta-row"><strong>Batch:</strong> ${popupDeptFilter ? selectedTeacher.filters.departments.find(d => d.id === popupDeptFilter)?.name : 'All Batches'}</div>
+                    <div class="meta-row"><strong>Batch:</strong> ${popupDeptFilter ? selectedTeacher.filters.batches.find(d => d.id === popupDeptFilter)?.name : 'All Batches'}</div>
                     ${subjects.length === 1 ? `<div class="meta-row"><strong>Subject:</strong> ${subjects[0].name} (${subjects[0].paperCode || subjects[0].code})</div>` : ''}
                     ${popupDateFrom || popupDateTo ? `<div class="meta-row"><strong>Period:</strong> ${popupDateFrom || 'Start'} to ${popupDateTo || 'Present'}</div>` : ''}
                     <div class="meta-row"><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
@@ -594,7 +596,7 @@ export default function TeacherReportPage() {
                                 <div style="font-weight: 600; font-size: 11px;">${sub.name}</div>
                             </td>
                             <td>
-                                <div style="font-size: 11px; font-weight: 600;">${sub.department}</div>
+                                <div style="font-size: 11px; font-weight: 600;">${sub.batch}</div>
                             </td>
                             <td style="color: var(--text-sub); font-size: 11px;">${sub.paperCode || sub.code}</td>
                             <td style="text-align: center;">${sub.sessions}</td>
@@ -700,11 +702,11 @@ export default function TeacherReportPage() {
     const filteredTeachers = teachers.filter(teacher =>
         teacher.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         teacher.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        teacher.department.toLowerCase().includes(searchTerm.toLowerCase())
+        teacher.batch.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     // Sorting state
-    const [sortField, setSortField] = useState<'name' | 'department' | 'totalSessions' | 'averageAttendance'>('name');
+    const [sortField, setSortField] = useState<'name' | 'batch' | 'totalSessions' | 'averageAttendance'>('name');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
     const handleListSort = (field: typeof sortField) => {
@@ -712,7 +714,7 @@ export default function TeacherReportPage() {
             setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
         } else {
             setSortField(field);
-            setSortOrder(field === 'name' || field === 'department' ? 'asc' : 'desc');
+            setSortOrder(field === 'name' || field === 'batch' ? 'asc' : 'desc');
         }
     };
 
@@ -732,9 +734,9 @@ export default function TeacherReportPage() {
 
     // Export functions
     const exportTeacherList = (format: 'csv' | 'excel') => {
-        const headers = ['Name', 'Email', 'Department', 'Subjects', 'No. of Lectures', 'Avg. Attendance %'];
+        const headers = ['Name', 'Email', 'Batch', 'Subjects', 'No. of Lectures', 'Avg. Attendance %'];
         const rows = sortedTeachers.map(t => [
-            t.name, t.email, t.department, t.subjects, t.totalSessions.toString(), `${t.averageAttendance}%`
+            t.name, t.email, t.batch, t.subjects, t.totalSessions.toString(), `${t.averageAttendance}%`
         ]);
 
         if (format === 'csv') {
@@ -770,6 +772,12 @@ export default function TeacherReportPage() {
         if (percentage >= 60) return 'bg-amber-100 text-amber-800';
         return 'bg-red-100 text-red-800';
     };
+
+    if (!user) return null;
+
+    if (user.role === 'student') {
+        return <AccessDenied message="Students do not have access to academic reports." />;
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -870,18 +878,18 @@ export default function TeacherReportPage() {
                                 </div>
                             )}
 
-                            {/* Department Filter */}
+                            {/* Batch Filter */}
                             {user?.role !== 'teacher' ? (
                                 <div className="w-full">
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                     <div className="relative">
                                         <select
-                                            value={selectedDepartmentId}
-                                            onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                            value={selectedBatchId}
+                                            onChange={(e) => setSelectedBatchId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-indigo-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
                                             <option value="">All {batchStatusFilter === 'completed' ? 'Completed ' : batchStatusFilter === 'active' ? 'Active ' : ''}Batches</option>
-                                            {departments
+                                            {batches
                                                 .filter(d => batchStatusFilter === 'all' || 
                                                     (batchStatusFilter === 'active' && d.status !== 'completed') || 
                                                     (batchStatusFilter === 'completed' && d.status === 'completed'))
@@ -903,7 +911,7 @@ export default function TeacherReportPage() {
                                     variant="outline"
                                     className="w-full lg:w-auto mt-6 bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 border-gray-200 hover:border-red-200 rounded-xl transition-colors h-[42px]"
                                     onClick={() => {
-                                        setSelectedDepartmentId('');
+                                        setSelectedBatchId('');
                                         setSearchTerm('');
                                         setBatchStatusFilter('active');
                                     }}
@@ -942,7 +950,7 @@ export default function TeacherReportPage() {
                                                     <tr>
                                                         {[
                                                             { key: 'name' as const, label: 'Teacher', align: 'text-left' },
-                                                            { key: 'department' as const, label: 'Batch', align: 'text-left' },
+                                                            { key: 'batch' as const, label: 'Batch', align: 'text-left' },
                                                             { key: 'totalSessions' as const, label: 'No. of Lectures', align: 'text-center' },
                                                             { key: 'averageAttendance' as const, label: 'Avg. Attendance', align: 'text-left' },
                                                         ].map(col => (
@@ -977,7 +985,7 @@ export default function TeacherReportPage() {
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                                                {teacher.department}
+                                                                {teacher.batch}
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium text-gray-900">
                                                                 {teacher.totalSessions}
@@ -1026,7 +1034,7 @@ export default function TeacherReportPage() {
                                                             </div>
                                                             <div>
                                                                 <div className="font-semibold text-gray-900 text-sm">{teacher.name}</div>
-                                                                <div className="text-xs text-gray-500">{teacher.department}</div>
+                                                                <div className="text-xs text-gray-500">{teacher.batch}</div>
                                                             </div>
                                                         </div>
                                                         <span className={`text-xs font-bold px-2 py-1 rounded ${getAttendanceBadgeColor(teacher.averageAttendance)}`}>
@@ -1111,7 +1119,7 @@ export default function TeacherReportPage() {
                                                         <p className="text-sm text-gray-500">{selectedTeacher.teacher.email}</p>
                                                         <div className="flex flex-wrap gap-2 mt-2">
                                                             <span className="px-2 py-0.5 bg-white text-gray-600 text-xs rounded border border-gray-200">
-                                                                {selectedTeacher.teacher.department}
+                                                                {selectedTeacher.teacher.batch}
                                                             </span>
                                                             {selectedTeacher.subjects.length === 1 && (
                                                                 <span className="px-2 py-0.5 bg-indigo-50 text-indigo-700 text-xs rounded border border-indigo-200 font-medium">
@@ -1148,18 +1156,18 @@ export default function TeacherReportPage() {
                                             </div>
                                         </div>
 
-                                        {/* Filters for Detail (Department / Date) */}
+                                        {/* Filters for Detail (Batch / Date) */}
                                         <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                                             <div className="text-xs font-semibold text-gray-500 uppercase mb-3">Filter Details</div>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                                                {selectedTeacher.filters.departments?.length > 0 && (
+                                                {selectedTeacher.filters.batches?.length > 0 && (
                                                     <select
                                                         value={popupDeptFilter}
                                                         onChange={(e) => setPopupDeptFilter(e.target.value)}
                                                         className="px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm"
                                                     >
                                                         <option value="">All Batches</option>
-                                                        {selectedTeacher.filters.departments.map((dept) => (
+                                                        {selectedTeacher.filters.batches.map((dept) => (
                                                             <option key={dept.id} value={dept.id}>{dept.name}</option>
                                                         ))}
                                                     </select>
@@ -1212,7 +1220,7 @@ export default function TeacherReportPage() {
                                                                     </td>
                                                                     <td className="px-4 py-3">
                                                                         <span className="px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 rounded border border-purple-100">
-                                                                            {subj.department}
+                                                                            {subj.batch}
                                                                         </span>
                                                                     </td>
                                                                     <td className="px-4 py-3 text-center text-gray-600">{subj.sessions}</td>

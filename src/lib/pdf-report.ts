@@ -12,12 +12,12 @@ export interface PDFReportData {
     studentName: string;
     studentId?: string;
     rollNumber: string | number;
-    department: string;
+    batch: string;
     semester: number;
     totalClasses: number;
     attendedClasses: number;
     percentage: number;
-    hodName: string; // Department HOD's name for footer
+    hodName: string; // Batch HOD's name for footer
     reportPeriod?: string; // e.g. "1 April 2026 – 30 April 2026"
     subjects?: {
         name: string;
@@ -378,7 +378,7 @@ function generateReportHTML(data: PDFReportData): string {
                     <div class="student-roll">Student ID: ${data.studentId || '-'} | Roll No: ${data.rollNumber}</div>
                 </div>
                 <div class="meta-values">
-                    <div class="meta-row"><strong>Department:</strong> ${data.department}</div>
+                    <div class="meta-row"><strong>Batch:</strong> ${data.batch}</div>
                     <div class="meta-row"><strong>Semester:</strong> ${data.semester}</div>
                     <div class="meta-row"><strong>Date:</strong> ${currentDate}</div>
                 </div>

@@ -29,10 +29,10 @@ interface UseRealtimeDataOptions {
  * @example
  * ```tsx
  * useRealtimeData({
- *   tables: ['students', 'departments'],
+ *   tables: ['students', 'batches'],
  *   onTableChange: () => {
  *     fetchStudents(token);
- *     fetchDepartments(token);
+ *     fetchBatches(token);
  *   }
  * });
  * ```

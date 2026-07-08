@@ -42,13 +42,13 @@ export async function GET(request: NextRequest) {
                     ts.assigned_date, ts.unassigned_date, ts.created_at, 
                     u.first_name as teacher_first_name, u.last_name as teacher_last_name,
                     s.code as subject_code, s.paper_code as subject_paper_code, s.name as subject_name,
-                    s.department_id,
-                    d.name as department_name, d.code as department_code,
-                    COALESCE(d.status, 'active') as department_status
+                    s.batch_id,
+                    d.name as batch_name, d.code as batch_code,
+                    COALESCE(d.status, 'active') as batch_status
              FROM teacher_subjects ts
              JOIN users u ON u.id = ts.teacher_id
              JOIN subjects s ON s.id = ts.subject_id
-             LEFT JOIN departments d ON s.department_id = d.id
+             LEFT JOIN batches d ON s.batch_id = d.id
             WHERE 1=1
         `;
         const params: string[] = [];
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
 
         queryStr += ' ORDER BY ts.created_at DESC';
 
-        const assignments = await query<TeacherSubjectRow & { department_id: string; department_name: string; department_code: string; department_status: string }>(queryStr, params);
+        const assignments = await query<TeacherSubjectRow & { batch_id: string; batch_name: string; batch_code: string; batch_status: string }>(queryStr, params);
 
         return NextResponse.json({
             assignments: assignments.map(a => ({
@@ -86,10 +86,10 @@ export async function GET(request: NextRequest) {
                 subjectCode: a.subject_code,
                 subjectPaperCode: a.subject_paper_code || null,
                 subjectName: a.subject_name,
-                departmentId: a.department_id,
-                departmentName: a.department_name,
-                departmentCode: a.department_code,
-                departmentStatus: a.department_status,
+                batchId: a.batch_id,
+                batchName: a.batch_name,
+                batchCode: a.batch_code,
+                batchStatus: a.batch_status,
                 academicYear: a.academic_year,
                 assignedDate: a.assigned_date,
                 unassignedDate: a.unassigned_date,
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST - Assign teacher to subject(s)
-// Supports: single subjectId OR subjectCode+departmentId (assigns all semesters)
+// Supports: single subjectId OR subjectCode+batchId (assigns all semesters)
 export async function POST(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { teacherId, subjectId, subjectCode, departmentId, academicYear } = await request.json();
+        const { teacherId, subjectId, subjectCode, batchId, academicYear } = await request.json();
 
         if (!teacherId || !academicYear) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -132,10 +132,10 @@ export async function POST(request: NextRequest) {
         // Get subject IDs
         let subjectIds: string[] = [];
 
-        if (subjectCode && departmentId) {
+        if (subjectCode && batchId) {
             const subjects = await query<{ id: string }>(
-                'SELECT id FROM subjects WHERE code = $1 AND department_id = $2',
-                [subjectCode, departmentId]
+                'SELECT id FROM subjects WHERE code = $1 AND batch_id = $2',
+                [subjectCode, batchId]
             );
             subjectIds = subjects.map(s => s.id);
         } else if (subjectId) {
@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
         // Check if any subject is in a completed batch
         const batchCheck = await query<{ status: string }>(
             `SELECT COALESCE(d.status, 'active') as status FROM subjects s
-             JOIN departments d ON s.department_id = d.id
+             JOIN batches d ON s.batch_id = d.id
              WHERE s.id = ANY($1::uuid[])`,
             [subjectIds]
         );

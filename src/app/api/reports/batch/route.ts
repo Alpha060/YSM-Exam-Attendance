@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
-interface DepartmentInfo {
+interface BatchInfo {
     id: string;
     name: string;
     code: string;
@@ -24,7 +24,7 @@ interface StudentAlert {
     attendance_pct: string;
 }
 
-// GET - Department Overview Data
+// GET - Batch Overview Data
 export async function GET(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -38,54 +38,54 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        const { role, departmentId: userDeptId, userId } = payload;
+        const { role, batchId: userDeptId, userId } = payload;
 
-        // Teachers cannot access department reports
+        // Teachers cannot access batch reports
         if (role === 'teacher') {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
         const searchParams = request.nextUrl.searchParams;
-        let selectedDeptId = searchParams.get('departmentId') || userDeptId;
+        let selectedDeptId = searchParams.get('batchId') || userDeptId;
 
-        // If still no dept, pick the first available department for super_admin
+        // If still no dept, pick the first available batch for super_admin
         if (!selectedDeptId && role === 'super_admin') {
             const firstDept = await queryOne<{ id: string }>(
-                `SELECT id FROM departments ORDER BY name LIMIT 1`,
+                `SELECT id FROM batches ORDER BY name LIMIT 1`,
                 []
             );
-            selectedDeptId = firstDept?.id || null;
+            selectedDeptId = firstDept?.id || undefined;
         }
 
         if (!selectedDeptId) {
-            return NextResponse.json({ error: 'No departments found' }, { status: 404 });
+            return NextResponse.json({ error: 'No batches found' }, { status: 404 });
         }
 
-        // Security check: super_admin has access to all departments
+        // Security check: super_admin has access to all batches
 
         const params: string[] = [selectedDeptId];
         const subjectParams: string[] = [selectedDeptId];
 
-        // 1. Get department info
-        const deptInfo = await queryOne<DepartmentInfo>(
-            `SELECT id, name, code FROM departments WHERE id = $1`,
+        // 1. Get batch info
+        const deptInfo = await queryOne<BatchInfo>(
+            `SELECT id, name, code FROM batches WHERE id = $1`,
             [selectedDeptId]
         );
 
         if (!deptInfo) {
-            return NextResponse.json({ error: 'Department not found' }, { status: 404 });
+            return NextResponse.json({ error: 'Batch not found' }, { status: 404 });
         }
 
 
 
         // 2. Get total students in this batch
         const studentCountResult = await queryOne<{ count: string }>(
-            `SELECT COUNT(DISTINCT id)::text as count FROM students WHERE department_id = $1`,
+            `SELECT COUNT(DISTINCT id)::text as count FROM students WHERE batch_id = $1`,
             [selectedDeptId]
         );
         const totalStudents = parseInt(studentCountResult?.count || '0');
 
-        // 3. Get subject-wise stats using department_id to link subjects
+        // 3. Get subject-wise stats using batch_id to link subjects
         const subjectStats = await query<SubjectStats>(
             `SELECT 
                 sub.id,
@@ -102,9 +102,9 @@ export async function GET(request: NextRequest) {
                 ) as avg_attendance
             FROM subjects sub
             LEFT JOIN student_subjects ss ON ss.subject_id = sub.id
-            LEFT JOIN students st ON ss.student_id = st.id AND st.department_id = $1
+            LEFT JOIN students st ON ss.student_id = st.id AND st.batch_id = $1
             LEFT JOIN attendance_records ar ON ar.subject_id = sub.id AND ar.student_id = st.id
-            WHERE sub.department_id = $1
+            WHERE sub.batch_id = $1
             GROUP BY sub.id, sub.name, sub.code
             ORDER BY sub.code, sub.name`,
             [selectedDeptId]
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
                 ) as attendance_pct
             FROM students s
             LEFT JOIN attendance_records ar ON ar.student_id = s.id
-            WHERE s.department_id = $1
+            WHERE s.batch_id = $1
             GROUP BY s.id, s.student_id, s.roll_number, s.first_name, s.last_name
             HAVING COUNT(ar.id) > 0 AND 
                 COALESCE(
@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
                 ) as attendance_pct
             FROM students s
             LEFT JOIN attendance_records ar ON ar.student_id = s.id
-            WHERE s.department_id = $1
+            WHERE s.batch_id = $1
             GROUP BY s.id, s.student_id, s.roll_number, s.first_name, s.last_name
             HAVING COUNT(ar.id) > 0 AND 
                 COALESCE(
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
         const totalSubjects = subjectStats.length;
 
         return NextResponse.json({
-            department: {
+            batch: {
                 id: deptInfo.id,
                 name: deptInfo.name,
                 code: deptInfo.code,
@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
             })),
         });
     } catch (error) {
-        console.error('Department overview error:', error);
+        console.error('Batch overview error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
     }
 }

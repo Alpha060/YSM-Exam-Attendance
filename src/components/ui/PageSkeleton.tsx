@@ -189,7 +189,7 @@ const HolidaysMobileSkeleton = () => (
 );
 
 // Page type configurations
-type PageType = 'subjects' | 'teachers' | 'students' | 'departments' | 'holidays' | 'reports' | 'classes';
+type PageType = 'subjects' | 'teachers' | 'students' | 'batches' | 'holidays' | 'reports' | 'classes';
 
 const pageConfigs: Record<PageType, {
     iconColor: string;
@@ -200,7 +200,7 @@ const pageConfigs: Record<PageType, {
     subjects: { iconColor: 'bg-indigo-100', tableColumns: 6, filterCount: 2 },
     teachers: { iconColor: 'bg-orange-100', tableColumns: 4, filterCount: 1 },
     students: { iconColor: 'bg-emerald-100', tableColumns: 4, filterCount: 3, showSubHeader: true },
-    departments: { iconColor: 'bg-amber-100', tableColumns: 6, filterCount: 0 },
+    batches: { iconColor: 'bg-amber-100', tableColumns: 6, filterCount: 0 },
     holidays: { iconColor: 'bg-cyan-100', tableColumns: 5, filterCount: 0, showSubHeader: true },
     reports: { iconColor: 'bg-gray-200', tableColumns: 0, filterCount: 0 },
     classes: { iconColor: 'bg-blue-100', tableColumns: 0, filterCount: 0 },
@@ -258,7 +258,7 @@ export function PageSkeleton({ type }: PageSkeletonProps) {
                     <ReportCardsSkeleton />
                 </main>
             ) : (
-                // Standard layout (subjects, teachers, departments)
+                // Standard layout (subjects, teachers, batches)
                 <main className="flex-1 pt-24 pb-12 px-4 max-w-7xl mx-auto w-full">
                     <PageHeaderSkeleton iconColor={config.iconColor} />
                     {config.filterCount > 0 ? (
@@ -274,7 +274,7 @@ export function PageSkeleton({ type }: PageSkeletonProps) {
                         ) : (
                             <FilterBarSkeleton filters={config.filterCount} />
                         )
-                    ) : type === 'departments' ? (
+                    ) : type === 'batches' ? (
                         <div className="flex flex-col sm:flex-row gap-4 mb-6">
                             <Shimmer className="flex-1 h-10 rounded-xl" />
                             <Shimmer className="w-52 h-10 rounded-xl" />

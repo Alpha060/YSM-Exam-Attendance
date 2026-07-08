@@ -8,14 +8,15 @@ import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
+import { AccessDenied } from '@/components/ui/access-denied';
 
 interface User {
     id: string;
-    role: 'super_admin' | 'teacher';
+    role: 'super_admin' | 'teacher' | 'student';
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
 interface AttendanceStats {
@@ -27,9 +28,9 @@ interface AttendanceStats {
     todayClasses?: number;
     lowAttendanceCount?: number;
     warningAttendanceCount?: number;
-    departmentStats?: {
-        departmentId: string;
-        departmentName: string;
+    batchStats?: {
+        batchId: string;
+        batchName: string;
         totalStudents: number;
         avgAttendance: number;
     }[];
@@ -115,6 +116,10 @@ export default function ReportsPage() {
 
     if (loading) return <PageSkeleton type="reports" />;
 
+    if (user && user.role === 'student') {
+        return <AccessDenied message="Students do not have access to academic reports." />;
+    }
+
     const reportCards = [
         {
             id: 'daily',
@@ -167,16 +172,16 @@ export default function ReportsPage() {
             bgLight: 'bg-orange-50',
             href: '/reports/teachers'
         }] : []),
-        // Department Overview - for HOD and Super Admin only
+        // Batch Overview - for HOD and Super Admin only
         ...(user && user.role !== 'teacher' ? [{
-            id: 'department',
+            id: 'batch',
             title: 'Batch Overview',
             description: 'Batch & subject analytics',
             icon: Building2,
             color: 'bg-teal-500',
             gradient: 'from-teal-500 to-teal-600',
             bgLight: 'bg-teal-50',
-            href: '/reports/department'
+            href: '/reports/batch'
         }] : [])
     ];
 
@@ -376,13 +381,13 @@ export default function ReportsPage() {
                     ))}
                 </div>
 
-                {/* Super Admin - Department Overview Table */}
-                {user?.role === 'super_admin' && stats.departmentStats && stats.departmentStats.length > 0 && (
+                {/* Super Admin - Batch Overview Table */}
+                {user?.role === 'super_admin' && stats.batchStats && stats.batchStats.length > 0 && (
                     <div className="shadow-lg bg-white overflow-hidden rounded-2xl">
                         <div className="bg-gray-50 border-b border-gray-100 py-4 px-6">
                             <h3 className="text-lg font-semibold flex items-center gap-2 text-gray-800">
                                 <Building2 className="w-5 h-5 text-gray-500" />
-                                Department Performance
+                                Batch Performance
                             </h3>
                         </div>
                         <div>
@@ -390,17 +395,17 @@ export default function ReportsPage() {
                                 <table className="w-full">
                                     <thead className="bg-gray-50/50">
                                         <tr>
-                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Department</th>
+                                            <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Batch</th>
                                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Students</th>
                                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Attendance</th>
                                             <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {stats.departmentStats.map((dept) => (
-                                            <tr key={dept.departmentId} className="hover:bg-gray-50/80 transition-colors">
+                                        {stats.batchStats.map((dept) => (
+                                            <tr key={dept.batchId} className="hover:bg-gray-50/80 transition-colors">
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="font-medium text-gray-900">{dept.departmentName}</div>
+                                                    <div className="font-medium text-gray-900">{dept.batchName}</div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                     {dept.totalStudents}

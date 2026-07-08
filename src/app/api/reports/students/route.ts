@@ -8,7 +8,7 @@ interface StudentData {
     roll_number: string;
     first_name: string;
     last_name: string;
-    department_name: string;
+    batch_name: string;
     total_lectures: string;
     attended: string;
 }
@@ -27,11 +27,11 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        const { role, departmentId: userDeptId, userId } = payload;
+        const { role, batchId: userDeptId, userId } = payload;
 
         const { searchParams } = new URL(request.url);
         const subjectIdsParam = searchParams.get('subjectIds'); // allows comma-separated string
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
         const startDate = searchParams.get('startDate');
         const endDate = searchParams.get('endDate');
 
@@ -62,19 +62,19 @@ export async function GET(request: NextRequest) {
                 SELECT ss.student_id FROM student_subjects ss
                 JOIN teacher_subjects ts ON ts.subject_id = ss.subject_id
                 JOIN subjects sub ON sub.id = ss.subject_id
-                JOIN departments dpt ON dpt.id = sub.department_id
+                JOIN batches dpt ON dpt.id = sub.batch_id
                 WHERE ts.teacher_id = $${teacherParamIdx}
                 AND COALESCE(dpt.status, 'active') = 'active'
             )`);
-            if (departmentId) {
-                params.push(departmentId);
-                filters.push(`s.department_id = $${params.length}`);
+            if (batchId) {
+                params.push(batchId);
+                filters.push(`s.batch_id = $${params.length}`);
             }
-        } else if (effectiveRole === 'super_admin' && departmentId) {
-            params.push(departmentId);
-            filters.push(`s.department_id = $${params.length}`);
+        } else if (effectiveRole === 'super_admin' && batchId) {
+            params.push(batchId);
+            filters.push(`s.batch_id = $${params.length}`);
         }
-        // super_admin with no departmentId: no filter — sees all students
+        // super_admin with no batchId: no filter — sees all students
 
 
         // Subject filter
@@ -124,11 +124,11 @@ export async function GET(request: NextRequest) {
                 s.roll_number,
                 s.first_name,
                 s.last_name,
-                d.name as department_name,
+                d.name as batch_name,
                 COUNT(DISTINCT ar.date::text || '-' || ar.subject_id::text || '-' || ar.lecture_number::text) as total_lectures,
                 COUNT(DISTINCT CASE WHEN ar.status = 'present' THEN ar.date::text || '-' || ar.subject_id::text || '-' || ar.lecture_number::text END) as attended
             FROM students s
-            LEFT JOIN departments d ON d.id = s.department_id
+            LEFT JOIN batches d ON d.id = s.batch_id
             LEFT JOIN attendance_records ar ON ar.student_id = s.id AND ar.subject_id IN (SELECT ss.subject_id FROM student_subjects ss WHERE ss.student_id = s.id) AND (${teacherSubjectFilter})
             WHERE 1=1
             ${filterClause}
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
             studentId: s.student_id,
             rollNumber: s.roll_number,
             name: `${s.first_name} ${s.last_name}`,
-            department: s.department_name || 'N/A',
+            batch: s.batch_name || 'N/A',
             totalClasses: parseInt(s.total_lectures) || 0,
             attended: parseInt(s.attended) || 0,
             percentage: parseInt(s.total_lectures) > 0

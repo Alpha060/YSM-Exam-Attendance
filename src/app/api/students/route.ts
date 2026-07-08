@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { query, queryOne } from '@/lib/db';
-import { verifyToken } from '@/lib/auth';
+import { verifyToken, hashPassword } from '@/lib/auth';
 import { parseCoachingId, extractRollNumber, matchBatchCode } from '@/lib/parseStudentId';
 
 interface StudentRow {
@@ -11,9 +11,16 @@ interface StudentRow {
     first_name: string;
     last_name: string;
     email: string | null;
-    department_id: string;
-    department_name: string;
-    department_code: string;
+    phone: string | null;
+    dob: string | null;
+    gender: string | null;
+    guardian_name: string | null;
+    address: string | null;
+    state: string | null;
+    pincode: string | null;
+    batch_id: string;
+    batch_name: string;
+    batch_code: string;
     current_semester: number;
     batch_year: number;
     is_active: boolean;
@@ -34,21 +41,21 @@ export async function GET(request: NextRequest) {
         }
 
         const { searchParams } = new URL(request.url);
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
         const subjectId = searchParams.get('subjectId');
 
         let queryStr = `
-            SELECT s.*, d.name as department_name, d.code as department_code
+            SELECT s.*, d.name as batch_name, d.code as batch_code
             FROM students s
-            LEFT JOIN departments d ON s.department_id = d.id
+            LEFT JOIN batches d ON s.batch_id = d.id
             WHERE s.is_active = true
         `;
         const params: string[] = [];
 
-        // Filter by batch (department)
-        if (departmentId) {
-            params.push(departmentId);
-            queryStr += ` AND s.department_id = $${params.length}`;
+        // Filter by batch (batch)
+        if (batchId) {
+            params.push(batchId);
+            queryStr += ` AND s.batch_id = $${params.length}`;
         }
 
         // Filter by subject enrollment
@@ -63,10 +70,10 @@ export async function GET(request: NextRequest) {
         // Teachers only see students in their assigned batches
         if (payload.role === 'teacher') {
             params.push(payload.userId);
-            queryStr += ` AND s.department_id IN (
-                SELECT department_id FROM user_departments WHERE user_id = $${params.length}
+            queryStr += ` AND s.batch_id IN (
+                SELECT batch_id FROM user_batches WHERE user_id = $${params.length}
                 UNION
-                SELECT department_id FROM users WHERE id = $${params.length} AND department_id IS NOT NULL
+                SELECT batch_id FROM users WHERE id = $${params.length} AND batch_id IS NOT NULL
             )`;
         }
 
@@ -83,9 +90,16 @@ export async function GET(request: NextRequest) {
                 first_name: s.first_name,
                 last_name: s.last_name,
                 email: s.email,
-                department_id: s.department_id,
-                department_name: s.department_name,
-                department_code: s.department_code,
+                phone: s.phone,
+                dob: s.dob,
+                gender: s.gender,
+                guardianName: s.guardian_name,
+                address: s.address,
+                state: s.state,
+                pincode: s.pincode,
+                batch_id: s.batch_id,
+                batch_name: s.batch_name,
+                batch_code: s.batch_code,
                 current_semester: s.current_semester,
                 batch_year: s.batch_year,
             }))
@@ -115,24 +129,33 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const studentId = body.studentId?.trim();
+        let studentId = body.studentId?.trim();
         const coachingId = body.coachingId?.trim()?.toUpperCase() || null;
         const firstName = body.firstName?.trim();
         const lastName = body.lastName?.trim() || '';
         const email = body.email?.trim() || null;
-        let departmentId = body.departmentId;
+        let batchId = body.batchId;
 
-        if (!studentId || !firstName) {
+        const phone = body.phone?.trim() || null;
+        const dob = body.dob || null;
+        const gender = body.gender || null;
+        const guardianName = body.guardianName?.trim() || null;
+        const address = body.address?.trim() || null;
+        const state = body.state?.trim() || null;
+        const pincode = body.pincode?.trim() || null;
+        const password = body.password || 'Welcome@123';
+
+        if (!firstName) {
             return NextResponse.json(
-                { error: 'Student ID and name are required' },
+                { error: 'Student name is required' },
                 { status: 400 }
             );
         }
 
-        // Auto-detect batch from coaching ID if no explicit departmentId
-        if (!departmentId && coachingId) {
+        // Auto-detect batch from coaching ID if no explicit batchId
+        if (!batchId && coachingId) {
             const allBatches = await query<{ id: string; code: string; status: string }>(
-                'SELECT id, code, COALESCE(status, \'active\') as status FROM departments'
+                'SELECT id, code, COALESCE(status, \'active\') as status FROM batches'
             );
             const batchCodes = allBatches.map(b => b.code);
             const matchedCode = matchBatchCode(coachingId, batchCodes);
@@ -145,16 +168,16 @@ export async function POST(request: NextRequest) {
                             { status: 400 }
                         );
                     }
-                    departmentId = matchedBatch.id;
+                    batchId = matchedBatch.id;
                 }
             }
         }
 
-        // If departmentId provided directly, verify batch is not completed
-        if (departmentId) {
+        // If batchId provided directly, verify batch is not completed
+        if (batchId) {
             const batch = await queryOne<{ status: string }>(
-                'SELECT COALESCE(status, \'active\') as status FROM departments WHERE id = $1',
-                [departmentId]
+                'SELECT COALESCE(status, \'active\') as status FROM batches WHERE id = $1',
+                [batchId]
             );
             if (batch?.status === 'completed') {
                 return NextResponse.json(
@@ -164,16 +187,25 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        if (!departmentId) {
+        if (!batchId) {
             return NextResponse.json(
                 { error: 'Could not determine batch. Please select a batch or use a valid coaching ID.' },
                 { status: 400 }
             );
         }
 
-        // Derive roll number from coaching ID if provided
-        let rollNumber = body.rollNumber ? parseInt(body.rollNumber) : 0;
+        // Get batch year from coaching ID or body or current year
+        let batchYear = body.batchYear ? parseInt(body.batchYear) : new Date().getFullYear();
         if (coachingId) {
+            const parsed = parseCoachingId(coachingId);
+            if (parsed.isValid && parsed.year) {
+                batchYear = parsed.year;
+            }
+        }
+
+        // Derive roll number
+        let rollNumber = body.rollNumber ? parseInt(body.rollNumber) : 0;
+        if (coachingId && rollNumber <= 0) {
             const extracted = extractRollNumber(coachingId);
             if (extracted !== null) {
                 rollNumber = extracted;
@@ -185,17 +217,23 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        if (rollNumber <= 0 && !coachingId) {
-            rollNumber = 1; // Default if no coaching ID provided
+        // Auto-assign roll number based on registration order if not provided
+        if (rollNumber <= 0) {
+            const maxRoll = await queryOne<{ max_roll: number }>(
+                'SELECT MAX(roll_number) as max_roll FROM students WHERE batch_id = $1 AND batch_year = $2',
+                [batchId, batchYear]
+            );
+            rollNumber = (maxRoll?.max_roll || 0) + 1;
         }
 
-        // Get batch year from coaching ID or current year
-        let batchYear = body.batchYear || new Date().getFullYear();
-        if (coachingId) {
-            const parsed = parseCoachingId(coachingId);
-            if (parsed.isValid && parsed.year) {
-                batchYear = parsed.year;
-            }
+        // Auto-generate student_id if not explicitly provided
+        if (!studentId) {
+            const configResult = await queryOne<{ value: any }>(
+                "SELECT value FROM application_settings WHERE key = 'student_id_config'"
+            );
+            const prefix = configResult?.value?.prefix || 'YSM-COMP';
+            const paddedRoll = rollNumber.toString().padStart(4, '0');
+            studentId = `${prefix}-${batchYear}-${paddedRoll}`;
         }
 
         // Check for duplicate coaching ID
@@ -212,11 +250,51 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        let newStudentUuid = null;
+        if (email) {
+            // Check duplicate email in users
+            const existingUser = await queryOne<{ id: string }>(
+                'SELECT id FROM users WHERE email = $1',
+                [email]
+            );
+            if (existingUser) {
+                return NextResponse.json(
+                    { error: 'A user with this email address already exists.' },
+                    { status: 400 }
+                );
+            }
+
+            const passwordHash = await hashPassword(password);
+            const userResult = await queryOne<{ id: string }>(
+                `INSERT INTO users (email, password_hash, first_name, last_name, role, batch_id)
+                 VALUES ($1, $2, $3, $4, 'student', $5)
+                 RETURNING id`,
+                [email.toLowerCase(), passwordHash, firstName, lastName, batchId]
+            );
+            if (!userResult) {
+                throw new Error('Failed to create user record.');
+            }
+            newStudentUuid = userResult.id;
+        } else {
+            const uuidResult = await queryOne<{ uuid: string }>(
+                "SELECT uuid_generate_v4() as uuid"
+            );
+            newStudentUuid = uuidResult?.uuid;
+        }
+
         const result = await query<{ id: string }>(
-            `INSERT INTO students (student_id, coaching_id, roll_number, first_name, last_name, email, department_id, current_semester, batch_year)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8)
+            `INSERT INTO students (
+                id, student_id, coaching_id, roll_number, first_name, last_name, email,
+                phone, dob, gender, guardian_name, address, state, pincode,
+                batch_id, current_semester, batch_year
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 1, $16)
              RETURNING id`,
-            [studentId, coachingId || null, rollNumber, firstName, lastName, email, departmentId, batchYear]
+            [
+                newStudentUuid, studentId, coachingId || null, rollNumber, firstName, lastName, email,
+                phone, dob, gender, guardianName, address, state, pincode,
+                batchId, batchYear
+            ]
         );
 
         const newStudentId = result[0].id;
@@ -230,9 +308,9 @@ export async function POST(request: NextRequest) {
         await query(
             `INSERT INTO student_subjects (student_id, subject_id, academic_year)
              SELECT $1, s.id, $2 FROM subjects s
-             WHERE s.department_id = $3
+             WHERE s.batch_id = $3
              ON CONFLICT (student_id, subject_id, academic_year) DO NOTHING`,
-            [newStudentId, academicYear, departmentId]
+            [newStudentId, academicYear, batchId]
         );
 
         return NextResponse.json({
@@ -276,10 +354,10 @@ export async function PUT(request: NextRequest) {
         }
 
         // Check if updating to a completed batch
-        if (body.departmentId) {
+        if (body.batchId) {
             const batch = await queryOne<{ status: string }>(
-                'SELECT COALESCE(status, \'active\') as status FROM departments WHERE id = $1',
-                [body.departmentId]
+                'SELECT COALESCE(status, \'active\') as status FROM batches WHERE id = $1',
+                [body.batchId]
             );
             if (batch?.status === 'completed') {
                 return NextResponse.json(
@@ -287,6 +365,72 @@ export async function PUT(request: NextRequest) {
                     { status: 400 }
                 );
             }
+        }
+
+        // Get existing student first
+        const existingStudent = await queryOne<{ email: string | null; first_name: string; last_name: string; batch_id: string }>(
+            'SELECT email, first_name, last_name, batch_id FROM students WHERE id = $1',
+            [id]
+        );
+
+        const email = body.email !== undefined ? (body.email?.trim() || null) : (existingStudent?.email || null);
+        const firstName = body.firstName !== undefined ? body.firstName.trim() : (existingStudent?.first_name || '');
+        const lastName = body.lastName !== undefined ? body.lastName.trim() : (existingStudent?.last_name || '');
+        const batchId = body.batchId || (existingStudent?.batch_id || null);
+
+        // Update or insert into users table if email exists
+        if (email) {
+            // Check if user row already exists
+            const existingUser = await queryOne<{ id: string }>(
+                'SELECT id FROM users WHERE id = $1',
+                [id]
+            );
+
+            if (existingUser) {
+                // Update user details
+                await query(
+                    `UPDATE users SET 
+                        email = $2,
+                        first_name = $3,
+                        last_name = $4,
+                        batch_id = $5,
+                        updated_at = CURRENT_TIMESTAMP
+                     WHERE id = $1`,
+                    [id, email.toLowerCase(), firstName, lastName, batchId]
+                );
+            } else {
+                // Check if the email is taken by another user
+                const emailCheck = await queryOne<{ id: string }>(
+                    'SELECT id FROM users WHERE email = $1',
+                    [email.toLowerCase()]
+                );
+                if (emailCheck) {
+                    return NextResponse.json(
+                        { error: 'A user with this email address already exists.' },
+                        { status: 400 }
+                    );
+                }
+
+                // Insert new user
+                const passwordHash = await hashPassword(body.password || 'Welcome@123');
+                await query(
+                    `INSERT INTO users (id, email, password_hash, first_name, last_name, role, batch_id)
+                     VALUES ($1, $2, $3, $4, $5, 'student', $6)`,
+                    [id, email.toLowerCase(), passwordHash, firstName, lastName, batchId]
+                );
+            }
+
+            // If a password was explicitly provided to reset
+            if (body.password) {
+                const passwordHash = await hashPassword(body.password);
+                await query(
+                    `UPDATE users SET password_hash = $2 WHERE id = $1`,
+                    [id, passwordHash]
+                );
+            }
+        } else {
+            // If email is removed, delete corresponding user
+            await query('DELETE FROM users WHERE id = $1', [id]);
         }
 
         const updateFields: string[] = [];
@@ -310,7 +454,7 @@ export async function PUT(request: NextRequest) {
                 }
             }
         }
-        if (body.firstName) {
+        if (body.firstName !== undefined) {
             updateFields.push(`first_name = $${++paramCount}`);
             params.push(body.firstName.trim());
         }
@@ -322,22 +466,52 @@ export async function PUT(request: NextRequest) {
             updateFields.push(`email = $${++paramCount}`);
             params.push(body.email?.trim() || null);
         }
-        if (body.departmentId) {
-            updateFields.push(`department_id = $${++paramCount}`);
-            params.push(body.departmentId);
+        if (body.batchId) {
+            updateFields.push(`batch_id = $${++paramCount}`);
+            params.push(body.batchId);
+        }
+        if (body.batchYear !== undefined) {
+            updateFields.push(`batch_year = $${++paramCount}`);
+            params.push(body.batchYear ? parseInt(body.batchYear) : null);
+        }
+        if (body.phone !== undefined) {
+            updateFields.push(`phone = $${++paramCount}`);
+            params.push(body.phone?.trim() || null);
+        }
+        if (body.dob !== undefined) {
+            updateFields.push(`dob = $${++paramCount}`);
+            params.push(body.dob || null);
+        }
+        if (body.gender !== undefined) {
+            updateFields.push(`gender = $${++paramCount}`);
+            params.push(body.gender || null);
+        }
+        if (body.guardianName !== undefined) {
+            updateFields.push(`guardian_name = $${++paramCount}`);
+            params.push(body.guardianName?.trim() || null);
+        }
+        if (body.address !== undefined) {
+            updateFields.push(`address = $${++paramCount}`);
+            params.push(body.address?.trim() || null);
+        }
+        if (body.state !== undefined) {
+            updateFields.push(`state = $${++paramCount}`);
+            params.push(body.state?.trim() || null);
+        }
+        if (body.pincode !== undefined) {
+            updateFields.push(`pincode = $${++paramCount}`);
+            params.push(body.pincode?.trim() || null);
         }
 
-        if (updateFields.length === 0) {
-            return NextResponse.json({ message: 'No fields to update' });
+        if (updateFields.length > 0) {
+            await query(
+                `UPDATE students SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+                params
+            );
         }
 
-        await query(
-            `UPDATE students SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-            params
-        );
-
-        // If batch (departmentId) was changed, re-sync student subjects
-        if (body.departmentId) {
+        // If batch (batchId) was changed, re-sync student subjects
+        if (body.batchId && body.batchId !== existingStudent?.batch_id) {
             const academicYear = (() => {
                 const now = new Date();
                 const y = now.getFullYear();
@@ -352,9 +526,9 @@ export async function PUT(request: NextRequest) {
             await query(
                 `INSERT INTO student_subjects (student_id, subject_id, academic_year)
                  SELECT $1, s.id, $2 FROM subjects s
-                 WHERE s.department_id = $3
+                 WHERE s.batch_id = $3
                  ON CONFLICT (student_id, subject_id, academic_year) DO NOTHING`,
-                [id, academicYear, body.departmentId]
+                [id, academicYear, body.batchId]
             );
         }
 
@@ -400,6 +574,7 @@ export async function DELETE(request: NextRequest) {
         await query('DELETE FROM student_subjects WHERE student_id = $1', [id]);
         await query('DELETE FROM attendance_records WHERE student_id = $1', [id]);
         await query('DELETE FROM students WHERE id = $1', [id]);
+        await query('DELETE FROM users WHERE id = $1', [id]);
 
         return NextResponse.json({ message: 'Student deleted successfully' });
     } catch (error) {

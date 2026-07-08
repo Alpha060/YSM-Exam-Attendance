@@ -9,7 +9,7 @@ interface UserRow {
     first_name: string;
     last_name: string;
     role: 'super_admin' | 'teacher';
-    department_id: string | null;
+    batch_id: string | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
             userId: user.id,
             email: user.email,
             role: user.role,
-            departmentId: user.department_id || undefined,
+            batchId: user.batch_id || undefined,
         }, !!rememberMe);
 
         return NextResponse.json({
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
                 firstName: user.first_name,
                 lastName: user.last_name,
                 role: user.role,
-                departmentId: user.department_id,
+                batchId: user.batch_id,
             },
         });
     } catch (error) {

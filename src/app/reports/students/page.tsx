@@ -9,18 +9,20 @@ import * as XLSX from 'xlsx';
 import { Input } from '@/components/ui/input';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
+import { AccessDenied } from '@/components/ui/access-denied';
 
 
 interface User {
     id: string;
-    role: 'super_admin' | 'teacher';
+    role: 'super_admin' | 'teacher' | 'student';
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -51,7 +53,7 @@ interface StudentDetail {
         rollNumber: string;
         name: string;
         email: string;
-        department: string;
+        batch: string;
     };
     summary: {
         totalClasses: number;
@@ -93,10 +95,10 @@ function StudentReportContent() {
     const viewParam = searchParams.get('view') || '';
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [students, setStudents] = useState<StudentAttendance[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [selectedBatchId, setSelectedBatchId] = useState('');
     const [batchStatusFilter, setBatchStatusFilter] = useState<'all' | 'active' | 'completed'>('active');
 
 
@@ -137,9 +139,9 @@ function StudentReportContent() {
         setUser(parsedUser);
 
         if (parsedUser.role === 'super_admin') {
-            fetchDepartments(token);
+            fetchBatches(token);
         } else if (parsedUser.role === 'teacher') {
-            fetchTeacherDepartments(token, parsedUser.id);
+            fetchTeacherBatches(token, parsedUser.id);
         }
     }, [router]);
 
@@ -152,17 +154,17 @@ function StudentReportContent() {
     const selectedSubjectsStr = Array.from(pageSelectedSubjectIds).sort().join(',');
 
     useEffect(() => {
-        if (departments.length === 1 && !selectedDepartmentId) {
-            setSelectedDepartmentId(departments[0].id);
+        if (batches.length === 1 && !selectedBatchId) {
+            setSelectedBatchId(batches[0].id);
         }
-    }, [departments, selectedDepartmentId]);
+    }, [batches, selectedBatchId]);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token && user) {
             fetchStudentReport(token);
         }
-    }, [selectedDepartmentId, selectedSubjectsStr, user, startDate, endDate, batchStatusFilter]);
+    }, [selectedBatchId, selectedSubjectsStr, user, startDate, endDate, batchStatusFilter]);
 
     // Fetch subjects when batch changes
     useEffect(() => {
@@ -170,12 +172,12 @@ function StudentReportContent() {
         if (token && user) {
             fetchSubjects(token);
         }
-    }, [selectedDepartmentId, user]);
+    }, [selectedBatchId, user]);
 
     const fetchSubjects = async (token: string) => {
         try {
             const params = new URLSearchParams();
-            if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
+            if (selectedBatchId) params.append('batchId', selectedBatchId);
             let url = '/api/subjects';
             if (params.toString()) url += '?' + params.toString();
 
@@ -196,14 +198,14 @@ function StudentReportContent() {
         }
     };
 
-    const getCachedDepartments = () => {
+    const getCachedBatches = () => {
         try {
-            const lCache = localStorage.getItem('offline_departments');
+            const lCache = localStorage.getItem('offline_batches');
             if (lCache) {
                 const parsed = JSON.parse(lCache);
                 if (parsed.data && Array.isArray(parsed.data)) return parsed.data;
             }
-            const sCache = sessionStorage.getItem('cache_departments');
+            const sCache = sessionStorage.getItem('cache_batches');
             if (sCache) {
                 const parsed = JSON.parse(sCache);
                 if (Array.isArray(parsed)) return parsed;
@@ -212,46 +214,46 @@ function StudentReportContent() {
         return null;
     };
 
-    const fetchDepartments = async (token: string) => {
-        const cached = getCachedDepartments();
-        if (cached && cached.length > 0) setDepartments(cached);
+    const fetchBatches = async (token: string) => {
+        const cached = getCachedBatches();
+        if (cached && cached.length > 0) setBatches(cached);
 
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const depts = data.departments || [];
-            setDepartments(depts);
-            try { sessionStorage.setItem('cache_departments', JSON.stringify(depts)); } catch { }
+            const depts = data.batches || [];
+            setBatches(depts);
+            try { sessionStorage.setItem('cache_batches', JSON.stringify(depts)); } catch { }
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
         }
     };
 
 
-    // Fetch departments for teachers (from their profile + multi-department assignments)
-    const fetchTeacherDepartments = async (token: string, teacherId: string) => {
-        const cached = getCachedDepartments();
-        if (cached && cached.length > 0) setDepartments(cached);
+    // Fetch batches for teachers (from their profile + multi-batch assignments)
+    const fetchTeacherBatches = async (token: string, teacherId: string) => {
+        const cached = getCachedBatches();
+        if (cached && cached.length > 0) setBatches(cached);
 
         try {
-            const res = await fetch('/api/me/departments', {
+            const res = await fetch('/api/me/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const depts = data.departments || [];
+            const depts = data.batches || [];
             if (depts.length > 0) {
-                setDepartments(depts);
+                setBatches(depts);
                 try {
-                    localStorage.setItem('offline_departments', JSON.stringify({
+                    localStorage.setItem('offline_batches', JSON.stringify({
                         timestamp: Date.now(),
                         data: depts
                     }));
                 } catch { /* ignore */ }
             }
         } catch (err) {
-            console.error('Error fetching teacher departments:', err);
+            console.error('Error fetching teacher batches:', err);
         }
     };
 
@@ -260,7 +262,7 @@ function StudentReportContent() {
         try {
             let url = '/api/reports/students';
             const params = new URLSearchParams();
-            if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
+            if (selectedBatchId) params.append('batchId', selectedBatchId);
             if (batchStatusFilter) params.append('batchStatus', batchStatusFilter);
             if (startDate) params.append('startDate', startDate);
             if (endDate) params.append('endDate', endDate);
@@ -708,7 +710,7 @@ function StudentReportContent() {
                     <div class="student-roll">Student ID: ${student.studentId || '-'} | Roll No: ${student.rollNumber}</div>
                 </div>
                 <div class="meta-values">
-                    <div class="meta-row"><strong>Batch:</strong> ${student.department}</div>
+                    <div class="meta-row"><strong>Batch:</strong> ${student.batch}</div>
                     <div class="meta-row"><strong>Date:</strong> ${new Date().toLocaleDateString()}</div>
                 </div>
             </div>
@@ -893,7 +895,7 @@ function StudentReportContent() {
         });
 
         const filename = `student_attendance_report_${new Date().toISOString().split('T')[0]}`;
-        const deptName = selectedDepartmentId ? departments.find(d => d.id === selectedDepartmentId)?.name || 'All' : 'All';
+        const deptName = selectedBatchId ? batches.find(d => d.id === selectedBatchId)?.name || 'All' : 'All';
 
         const metadataRows = [
             ['Generated on:', new Date().toLocaleDateString()],
@@ -967,7 +969,7 @@ function StudentReportContent() {
             <p>Attendance Overview</p>
         </div>
     </div>
-    <p class="meta"><strong>Filters Applied:</strong> Generated on: ${new Date().toLocaleDateString()} | Total Students: ${filteredStudents.length}${selectedDepartmentId ? ` | Batch: ${departments.find(d => d.id === selectedDepartmentId)?.name || ''}` : ''}<br/><strong>Subjects:</strong> ${subjectFilterText}</p>
+    <p class="meta"><strong>Filters Applied:</strong> Generated on: ${new Date().toLocaleDateString()} | Total Students: ${filteredStudents.length}${selectedBatchId ? ` | Batch: ${batches.find(d => d.id === selectedBatchId)?.name || ''}` : ''}<br/><strong>Subjects:</strong> ${subjectFilterText}</p>
     <table>
         <thead>
             <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
@@ -996,6 +998,12 @@ function StudentReportContent() {
             setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
         }
     };
+
+    if (!user) return null;
+
+    if (user.role === 'student') {
+        return <AccessDenied message="Students do not have access to academic reports." />;
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -1135,18 +1143,18 @@ function StudentReportContent() {
 
 
 
-                            {/* Department Filter */}
-                            {(user?.role === 'super_admin' || departments.length > 1) && (
+                            {/* Batch Filter */}
+                            {(user?.role === 'super_admin' || batches.length > 1) && (
                                 <div className="w-full">
                                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                     <div className="relative">
                                         <select
-                                            value={selectedDepartmentId}
-                                            onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                            value={selectedBatchId}
+                                            onChange={(e) => setSelectedBatchId(e.target.value)}
                                             className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-purple-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium shadow-sm"
                                         >
                                             <option value="">All {batchStatusFilter === 'completed' ? 'Completed ' : batchStatusFilter === 'active' ? 'Active ' : ''}Batches</option>
-                                            {departments
+                                            {batches
                                                 .filter(d => batchStatusFilter === 'all' || 
                                                     (batchStatusFilter === 'active' && d.status !== 'completed') || 
                                                     (batchStatusFilter === 'completed' && d.status === 'completed'))
@@ -1189,7 +1197,7 @@ function StudentReportContent() {
                                         setStartDate('');
                                         setEndDate('');
 
-                                        setSelectedDepartmentId('');
+                                        setSelectedBatchId('');
                                         setSearchTerm('');
                                         setPageSelectedSubjectIds(new Set(availableSubjects.map(s => s.id)));
                                         setShowSubjectFilter(false);
@@ -1511,7 +1519,7 @@ function StudentReportContent() {
                                                                 Roll: {selectedStudent.student.rollNumber}
                                                             </span>
                                                             <span className="px-2 py-0.5 bg-white text-gray-600 text-xs rounded border border-gray-200">
-                                                                {selectedStudent.student.department}
+                                                                {selectedStudent.student.batch}
                                                             </span>
                                                         </div>
                                                     </div>

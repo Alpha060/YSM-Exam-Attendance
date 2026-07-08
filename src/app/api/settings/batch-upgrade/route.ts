@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
         const { searchParams } = new URL(request.url);
         const deptType = searchParams.get('deptType') || 'regular';
 
-        // Get saved configurations for the specific department type
+        // Get saved configurations for the specific batch type
         const settingKey = `batch_mapping_${deptType}`;
         const rows = await query<{ value: any }>(
             `SELECT value FROM application_settings WHERE key = $1`,
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
         // Validation
         if (!deptType || !['regular', 'vocational', 'pg'].includes(deptType)) {
-            return NextResponse.json({ error: 'Invalid department type' }, { status: 400 });
+            return NextResponse.json({ error: 'Invalid batch type' }, { status: 400 });
         }
 
         // We will execute student upgrades only for valid (non-empty) mappings

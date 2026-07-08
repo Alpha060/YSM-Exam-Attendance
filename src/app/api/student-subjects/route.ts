@@ -8,7 +8,7 @@ interface StudentSubjectRow {
     student_roll_number: string;
     student_first_name: string;
     student_last_name: string;
-    student_department_id: string;
+    student_batch_id: string;
     student_current_semester: number;
     student_custom_id?: string;
     subject_id: string;
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
             SELECT ss.id, ss.student_id, ss.subject_id, ss.academic_year, ss.enrolled_at, 
                    st.roll_number as student_roll_number,
                    st.first_name as student_first_name, st.last_name as student_last_name,
-                   st.department_id as student_department_id,
+                   st.batch_id as student_batch_id,
                    st.current_semester as student_current_semester,
                    st.student_id as student_custom_id,
                    s.code as subject_code, s.paper_code as subject_paper_code, s.name as subject_name
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
                 studentId: e.student_id,
                 studentRollNumber: e.student_roll_number,
                 studentName: `${e.student_first_name} ${e.student_last_name}`,
-                studentDepartmentId: e.student_department_id,
+                studentBatchId: e.student_batch_id,
                 studentCurrentSemester: e.student_current_semester,
                 studentCustomId: e.student_custom_id,
                 subjectId: e.subject_id,

@@ -24,11 +24,12 @@ import { AccessDenied } from '@/components/ui/access-denied';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { useRealtimeData } from '@/hooks/useRealtimeData';
 
-interface Department {
+interface Batch {
     id: string;
     name: string;
     code: string;
     status: 'upcoming' | 'active' | 'completed';
+    tuition_fee: number;
 }
 
 interface User {
@@ -61,15 +62,15 @@ const STATUS_CONFIG = {
 
 export default function BatchesPage() {
     const router = useRouter();
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<User | null>(null);
     const [showModal, setShowModal] = useState(false);
-    const [editingDept, setEditingDept] = useState<Department | null>(null);
-    const [formData, setFormData] = useState({ name: '', code: '', status: 'active' as Department['status'] });
+    const [editingDept, setEditingDept] = useState<Batch | null>(null);
+    const [formData, setFormData] = useState({ name: '', code: '', status: 'active' as Batch['status'], tuition_fee: 0 });
     const [error, setError] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'all' | Department['status']>('all');
+    const [statusFilter, setStatusFilter] = useState<'all' | Batch['status']>('all');
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [completingId, setCompletingId] = useState<string | null>(null);
 
@@ -85,25 +86,25 @@ export default function BatchesPage() {
         try {
             const cached = sessionStorage.getItem('cache_dept_page');
             if (cached) {
-                setDepartments(JSON.parse(cached));
+                setBatches(JSON.parse(cached));
                 setLoading(false);
             }
         } catch { /* ignore cache errors */ }
 
-        fetchDepartments(token);
+        fetchBatches(token);
     }, [router]);
 
     useRealtimeData({
-        tables: ['departments'],
+        tables: ['batches'],
         onTableChange: useCallback(() => {
             const token = localStorage.getItem('token');
-            if (token) fetchDepartments(token);
+            if (token) fetchBatches(token);
         }, []),
     });
 
-    const fetchDepartments = async (token: string) => {
+    const fetchBatches = async (token: string) => {
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.status === 401) {
@@ -111,11 +112,11 @@ export default function BatchesPage() {
                 return;
             }
             const data = await res.json();
-            const deptsList = (data.departments || []).map((d: Department) => ({
+            const deptsList = (data.batches || []).map((d: Batch) => ({
                 ...d,
                 status: d.status || 'active',
             }));
-            setDepartments(deptsList);
+            setBatches(deptsList);
             try { sessionStorage.setItem('cache_dept_page', JSON.stringify(deptsList)); } catch {}
         } catch (err) {
             console.error('Error fetching batches:', err);
@@ -130,14 +131,14 @@ export default function BatchesPage() {
 
         try {
             if (editingDept) {
-                const res = await fetch('/api/departments', {
+                const res = await fetch('/api/batches', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                     body: JSON.stringify({ id: editingDept.id, ...formData }),
                 });
                 if (!res.ok) { setError((await res.json()).error || 'Failed to save'); return; }
             } else {
-                const res = await fetch('/api/departments', {
+                const res = await fetch('/api/batches', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                     body: JSON.stringify(formData),
@@ -146,15 +147,15 @@ export default function BatchesPage() {
             }
 
             setShowModal(false);
-            setFormData({ name: '', code: '', status: 'active' });
+            setFormData({ name: '', code: '', status: 'active', tuition_fee: 0 });
             setEditingDept(null);
-            fetchDepartments(token!);
+            fetchBatches(token!);
         } catch {
             setError('Network error');
         }
     };
 
-    const handleCompleteBatch = async (dept: Department) => {
+    const handleCompleteBatch = async (dept: Batch) => {
         const isCompleting = dept.status !== 'completed';
         const newStatus = isCompleting ? 'completed' : 'active';
         const confirmMsg = isCompleting
@@ -166,13 +167,13 @@ export default function BatchesPage() {
         setCompletingId(dept.id);
         const token = localStorage.getItem('token');
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                 body: JSON.stringify({ id: dept.id, status: newStatus }),
             });
             if (res.ok) {
-                fetchDepartments(token!);
+                fetchBatches(token!);
             } else {
                 alert((await res.json()).error || 'Failed to update status');
             }
@@ -186,27 +187,27 @@ export default function BatchesPage() {
         if (!confirm('Are you sure you want to delete this batch? This cannot be undone.')) return;
         const token = localStorage.getItem('token');
         try {
-            const res = await fetch(`/api/departments?id=${id}`, {
+            const res = await fetch(`/api/batches?id=${id}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.ok) {
-                fetchDepartments(token!);
+                fetchBatches(token!);
             } else {
                 alert((await res.json()).error || 'Cannot delete this batch');
             }
         } catch { console.error('Error deleting'); }
     };
 
-    const openEditModal = (dept: Department) => {
+    const openEditModal = (dept: Batch) => {
         setEditingDept(dept);
-        setFormData({ name: dept.name, code: dept.code, status: dept.status });
+        setFormData({ name: dept.name, code: dept.code, status: dept.status, tuition_fee: dept.tuition_fee || 0 });
         setShowModal(true);
     };
 
     const openAddModal = () => {
         setEditingDept(null);
-        setFormData({ name: '', code: '', status: 'active' });
+        setFormData({ name: '', code: '', status: 'active', tuition_fee: 0 });
         setShowModal(true);
     };
 
@@ -216,7 +217,7 @@ export default function BatchesPage() {
         router.replace('/login');
     };
 
-    const filteredDepartments = departments.filter(dept => {
+    const filteredBatches = batches.filter(dept => {
         const matchesSearch =
             dept.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             dept.code.toLowerCase().includes(searchQuery.toLowerCase());
@@ -225,13 +226,13 @@ export default function BatchesPage() {
     });
 
     const counts = {
-        all: departments.length,
-        active: departments.filter(d => d.status === 'active').length,
-        upcoming: departments.filter(d => d.status === 'upcoming').length,
-        completed: departments.filter(d => d.status === 'completed').length,
+        all: batches.length,
+        active: batches.filter(d => d.status === 'active').length,
+        upcoming: batches.filter(d => d.status === 'upcoming').length,
+        completed: batches.filter(d => d.status === 'completed').length,
     };
 
-    if (loading) return <PageSkeleton type="departments" />;
+    if (loading) return <PageSkeleton type="batches" />;
     if (user?.role !== 'super_admin') {
         return <AccessDenied message="You do not have permission to access the Batches page." />;
     }
@@ -296,7 +297,7 @@ export default function BatchesPage() {
                 </div>
 
                 {/* Batches Grid / List */}
-                {departments.length === 0 ? (
+                {batches.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
                         <div className="bg-amber-50 p-4 rounded-full mb-4">
                             <Building2 className="w-8 h-8 text-amber-400" />
@@ -307,7 +308,7 @@ export default function BatchesPage() {
                         </p>
                         <Button onClick={openAddModal} variant="outline" className="mt-4">Add Batch</Button>
                     </div>
-                ) : filteredDepartments.length === 0 ? (
+                ) : filteredBatches.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 bg-white rounded-2xl border border-gray-100">
                         <Search className="w-8 h-8 text-gray-300 mb-3" />
                         <p className="text-gray-500">No batches match your filters.</p>
@@ -327,7 +328,7 @@ export default function BatchesPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
-                                    {filteredDepartments.map((dept, index) => {
+                                    {filteredBatches.map((dept, index) => {
                                         const sc = STATUS_CONFIG[dept.status] || STATUS_CONFIG.active;
                                         const isCompleting = completingId === dept.id;
                                         return (
@@ -392,7 +393,7 @@ export default function BatchesPage() {
 
                         {/* Mobile Cards */}
                         <div className="md:hidden grid grid-cols-1 gap-4">
-                            {filteredDepartments.map((dept) => {
+                            {filteredBatches.map((dept) => {
                                 const sc = STATUS_CONFIG[dept.status] || STATUS_CONFIG.active;
                                 return (
                                     <div key={dept.id} className={`bg-white p-5 rounded-2xl shadow-sm border border-gray-100 ${dept.status === 'completed' ? 'opacity-75' : ''}`}>
@@ -409,6 +410,7 @@ export default function BatchesPage() {
                                                             <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />
                                                             {sc.label}
                                                         </span>
+                                                        <span className="text-xs bg-gray-100 text-gray-700 border border-gray-200 px-2 py-0.5 rounded font-medium">₹{dept.tuition_fee || 0}/mo</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -477,7 +479,18 @@ export default function BatchesPage() {
                                         maxLength={10}
                                         className="rounded-xl border-gray-200 font-mono"
                                     />
-                                    <p className="text-xs text-gray-500">Used in coaching IDs (e.g., lks2026001)</p>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="tuition_fee" className="text-gray-700">Tuition Fee (₹/month) <span className="text-red-500">*</span></Label>
+                                    <Input
+                                        id="tuition_fee"
+                                        type="number"
+                                        placeholder="e.g. 1500"
+                                        value={formData.tuition_fee}
+                                        onChange={(e) => setFormData({ ...formData, tuition_fee: Number(e.target.value) })}
+                                        required
+                                        className="rounded-xl border-gray-200 font-mono"
+                                    />
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="status" className="text-gray-700">Status</Label>
@@ -485,7 +498,7 @@ export default function BatchesPage() {
                                         <select
                                             id="status"
                                             value={formData.status}
-                                            onChange={(e) => setFormData({ ...formData, status: e.target.value as Department['status'] })}
+                                            onChange={(e) => setFormData({ ...formData, status: e.target.value as Batch['status'] })}
                                             className="w-full bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 appearance-none"
                                         >
                                             <option value="upcoming">Upcoming (not started)</option>

@@ -20,12 +20,12 @@ interface Holiday {
     name: string;
     date: string;
     description: string | null;
-    department_id: string | null;
+    batch_id: string | null;
 }
 
 interface User {
     role: 'super_admin' | 'teacher';
-    departmentId?: string;
+    batchId?: string;
 }
 
 export default function HolidaysPage() {
@@ -293,7 +293,7 @@ export default function HolidaysPage() {
 
     if (loading) return <PageSkeleton type="holidays" />;
 
-    if (user?.role === 'teacher') {
+    if (user?.role !== 'super_admin') {
         return <AccessDenied />;
     }
 
@@ -379,12 +379,12 @@ export default function HolidaysPage() {
                                             <td className="px-6 py-4 font-medium">{holiday.name}</td>
                                             <td className="px-6 py-4 text-gray-500">
                                                 {holiday.description || '-'}
-                                                {holiday.department_id === null && <span className="ml-2 inline-block px-2 text-xs rounded-full bg-indigo-100 text-indigo-700">Global</span>}
-                                                {holiday.department_id && <span className="ml-2 inline-block px-2 text-xs rounded-full bg-orange-100 text-orange-700">Dept</span>}
+                                                {holiday.batch_id === null && <span className="ml-2 inline-block px-2 text-xs rounded-full bg-indigo-100 text-indigo-700">Global</span>}
+                                                {holiday.batch_id && <span className="ml-2 inline-block px-2 text-xs rounded-full bg-orange-100 text-orange-700">Dept</span>}
                                             </td>
                                             {canManageHolidays && (
                                                 <td className="px-6 py-4">
-                                                    {(isSuperAdmin || (isHOD && holiday.department_id === user?.departmentId)) && (
+                                                    {(isSuperAdmin || (isHOD && holiday.batch_id === user?.batchId)) && (
                                                         <Button variant="outline" size="sm" onClick={() => handleDelete(holiday.id)} className="text-red-500 hover:text-red-700">
                                                             <Trash2 className="h-4 w-4" />
                                                         </Button>
@@ -434,7 +434,7 @@ export default function HolidaysPage() {
                                         {/* Delete Button */}
                                         {canManageHolidays && (
                                             <div className="flex-shrink-0 self-start">
-                                                {(isSuperAdmin || (isHOD && holiday.department_id === user?.departmentId)) && (
+                                                {(isSuperAdmin || (isHOD && holiday.batch_id === user?.batchId)) && (
                                                     <button
                                                         onClick={() => handleDelete(holiday.id)}
                                                         className="p-2 rounded-lg hover:bg-red-50 transition-colors"

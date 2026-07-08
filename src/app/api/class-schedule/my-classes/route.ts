@@ -23,9 +23,9 @@ export async function GET(request: NextRequest) {
 
         const classes = await query<{
             id: string;
-            department_id: string;
-            department_name: string;
-            department_code: string;
+            batch_id: string;
+            batch_name: string;
+            batch_code: string;
             semester: number;
             slot_number: number;
             subject_id: string;
@@ -37,9 +37,9 @@ export async function GET(request: NextRequest) {
         }>(
             `SELECT 
                 dca.id,
-                dca.department_id,
-                d.name as department_name,
-                d.code as department_code,
+                dca.batch_id,
+                d.name as batch_name,
+                d.code as batch_code,
                 dca.semester,
                 dca.slot_number,
                 dca.subject_id,
@@ -49,10 +49,10 @@ export async function GET(request: NextRequest) {
                 cts.start_time::text,
                 cts.end_time::text
              FROM daily_class_assignments dca
-             JOIN departments d ON dca.department_id = d.id
+             JOIN batches d ON dca.batch_id = d.id
              JOIN subjects s ON dca.subject_id = s.id
              LEFT JOIN class_time_slots cts 
-                ON cts.department_id = dca.department_id AND cts.slot_number = dca.slot_number
+                ON cts.batch_id = dca.batch_id AND cts.slot_number = dca.slot_number
              WHERE dca.teacher_id = $1 AND dca.date = $2
              ORDER BY cts.start_time NULLS LAST, dca.slot_number`,
             [payload.userId, date]

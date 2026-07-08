@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
         try {
             await client.query('BEGIN');
 
-            const departmentId = payload.role === 'super_admin' ? payload.departmentId : null;
+            const batchId = payload.role === 'super_admin' ? payload.batchId : null;
 
             if (validHolidays.length > 0) {
                 const CHUNK_SIZE = 100;
@@ -104,11 +104,11 @@ export async function POST(request: NextRequest) {
                     chunk.forEach((h, idx) => {
                         const offset = idx * 4;
                         values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4})`);
-                        params.push(h.name, h.date, h.description, departmentId);
+                        params.push(h.name, h.date, h.description, batchId);
                     });
                     
                     await client.query(
-                        `INSERT INTO holidays (name, date, description, department_id)
+                        `INSERT INTO holidays (name, date, description, batch_id)
                          VALUES ${values.join(', ')}`,
                         params
                     );

@@ -22,12 +22,12 @@ export async function POST(req: Request) {
             errors: [] as any[]
         };
 
-        // Cache departments for validation
-        const deptResult = await client.query('SELECT id, code FROM departments');
-        const departmentMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id }]));
+        // Cache batches for validation
+        const deptResult = await client.query('SELECT id, code FROM batches');
+        const batchMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), { id: d.id }]));
 
-        // Cache ALL subjects for assignment (including department for batch filtering)
-        const subjectResult = await client.query('SELECT id, code, name, department_id FROM subjects');
+        // Cache ALL subjects for assignment (including batch for batch filtering)
+        const subjectResult = await client.query('SELECT id, code, name, batch_id FROM subjects');
         const allSubjects = subjectResult.rows;
 
         // Batch: Pre-fetch all existing emails in one query
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
 
         // Collect subject assignments for batch insert
         const subjectAssignments: { teacherId: string; subjectId: string; academicYear: string }[] = [];
-        const userDeptAssignments: { userId: string; departmentId: string }[] = [];
+        const userDeptAssignments: { userId: string; batchId: string }[] = [];
 
         // Calculate academic year once
         const now = new Date();
@@ -77,7 +77,7 @@ export async function POST(req: Request) {
                 }
 
                 // 1. Validate Required Fields
-                if (!teacher.email || !teacher.first_name || !(teacher.department_code || teacher.batch_code) || !teacher.role) {
+                if (!teacher.email || !teacher.first_name || !(teacher.batch_code || teacher.batch_code) || !teacher.role) {
                     throw new Error('Missing required fields (email, name, role, batch_code)');
                 }
 
@@ -93,20 +93,20 @@ export async function POST(req: Request) {
                     throw new Error(`Email already exists: ${email}`);
                 }
 
-                // Department validation (now supports comma-separated, also accepts batch_code)
-                const rawDeptCode = teacher.department_code || teacher.batch_code;
+                // Batch validation (now supports comma-separated, also accepts batch_code)
+                const rawDeptCode = teacher.batch_code || teacher.batch_code;
                 if (!rawDeptCode) {
                     throw new Error('Missing required field: batch_code');
                 }
                 const deptCodes = rawDeptCode.split(',').map((c: string) => c.trim().toUpperCase()).filter(Boolean);
                 if (deptCodes.length === 0) {
-                    throw new Error('No department codes provided');
+                    throw new Error('No batch codes provided');
                 }
 
                 const assignedDeptIds: string[] = [];
                 
                 for (const code of deptCodes) {
-                    const deptInfo = departmentMap.get(code);
+                    const deptInfo = batchMap.get(code);
                     if (!deptInfo) {
                         throw new Error(`Invalid Batch Code: ${code}`);
                     }
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
                 const resolvedSubjectIds: string[] = [];
                 if (teacher.subject_codes) {
                     // Only match subjects within the teacher's assigned batches
-                    const batchSubjects = allSubjects.filter((s: any) => assignedDeptIds.includes(s.department_id));
+                    const batchSubjects = allSubjects.filter((s: any) => assignedDeptIds.includes(s.batch_id));
                     const subjectInputs = teacher.subject_codes.split(',').map((s: string) => s.trim()).filter(Boolean);
                     for (const input of subjectInputs) {
                         const inputUpper = input.toUpperCase();
@@ -182,7 +182,7 @@ export async function POST(req: Request) {
                 });
                 
                 const insertResult = await client.query(
-                    `INSERT INTO users (first_name, last_name, email, password_hash, role, department_id)
+                    `INSERT INTO users (first_name, last_name, email, password_hash, role, batch_id)
                      VALUES ${values.join(', ')} RETURNING id, email`,
                     params
                 );
@@ -192,11 +192,11 @@ export async function POST(req: Request) {
                     const newTeacherId = row.id;
                     const insertedEmail = row.email;
                     
-                    // Link multi-departments
+                    // Link multi-batches
                     const baseUserRecord = chunk.find(c => c.email === insertedEmail);
                     if (baseUserRecord && baseUserRecord.allDeptIds) {
                          for (const dId of baseUserRecord.allDeptIds) {
-                              userDeptAssignments.push({ userId: newTeacherId, departmentId: dId });
+                              userDeptAssignments.push({ userId: newTeacherId, batchId: dId });
                          }
                     }
                     
@@ -214,7 +214,7 @@ export async function POST(req: Request) {
             }
         }
 
-        // Batch insert user department spanning authorities
+        // Batch insert user batch spanning authorities
         if (userDeptAssignments.length > 0) {
             const CHUNK_SIZE = 100;
             for (let i = 0; i < userDeptAssignments.length; i += CHUNK_SIZE) {
@@ -224,12 +224,12 @@ export async function POST(req: Request) {
                 chunk.forEach((a, idx) => {
                     const offset = idx * 2;
                     values.push(`($${offset + 1}, $${offset + 2})`);
-                    params.push(a.userId, a.departmentId);
+                    params.push(a.userId, a.batchId);
                 });
                 await client.query(
-                    `INSERT INTO user_departments (user_id, department_id)
+                    `INSERT INTO user_batches (user_id, batch_id)
                      VALUES ${values.join(', ')}
-                     ON CONFLICT (user_id, department_id) DO NOTHING`,
+                     ON CONFLICT (user_id, batch_id) DO NOTHING`,
                     params
                 );
             }

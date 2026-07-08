@@ -22,8 +22,8 @@ interface StudentRow {
     student_id: string;
     email: string;
     roll_number: string;
-    department_id: string;
-    department_name: string;
+    batch_id: string;
+    batch_name: string;
     current_semester: number;
     total_classes: string;
     attended_classes: string;
@@ -39,7 +39,7 @@ interface SubjectRow {
 }
 
 interface HODRow {
-    department_id: string;
+    batch_id: string;
     hod_name: string;
 }
 
@@ -111,20 +111,20 @@ export async function GET(request: NextRequest) {
                 s.student_id,
                 s.email,
                 s.roll_number,
-                s.department_id,
-                COALESCE(d.name, 'N/A') as department_name,
+                s.batch_id,
+                COALESCE(d.name, 'N/A') as batch_name,
                 s.current_semester,
                 COUNT(ar.id) as total_classes,
                 COUNT(CASE WHEN ar.status = 'present' THEN 1 END) as attended_classes
             FROM students s
-            LEFT JOIN departments d ON d.id = s.department_id
+            LEFT JOIN batches d ON d.id = s.batch_id
             LEFT JOIN attendance_records ar ON ar.student_id = s.id
                 AND ar.date >= $1 AND ar.date <= $2
             WHERE s.is_active = true
               AND s.email IS NOT NULL
               AND s.email != ''
             GROUP BY s.id, s.first_name, s.last_name, s.student_id, s.email, s.roll_number, 
-                     s.department_id, d.name, s.current_semester
+                     s.batch_id, d.name, s.current_semester
             HAVING COUNT(ar.id) > 0
             ORDER BY s.roll_number ASC
         `, [startDate, endDate]);
@@ -148,10 +148,10 @@ export async function GET(request: NextRequest) {
             });
         }
 
-        // ---- Step 3: Get HOD name for each department ----
+        // ---- Step 3: Get HOD name for each batch ----
         const hodData = await query<HODRow>(`
             SELECT 
-                u.department_id,
+                u.batch_id,
                 CONCAT(u.first_name, ' ', u.last_name) as hod_name
             FROM users u
             WHERE u.role = 'teacher'
@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
         `);
         const hodByDept: Record<string, string> = {};
         hodData.forEach((h) => {
-            hodByDept[h.department_id] = h.hod_name;
+            hodByDept[h.batch_id] = h.hod_name;
         });
 
         // ---- Step 4: Get subject-wise breakdown for PREVIOUS MONTH ----
@@ -215,12 +215,12 @@ export async function GET(request: NextRequest) {
                 studentEmail: st.email,
                 studentId: st.student_id,
                 rollNumber: st.roll_number,
-                department: st.department_name,
+                batch: st.batch_name,
                 semester: st.current_semester,
                 totalClasses: total,
                 attendedClasses: attended,
                 percentage: total > 0 ? Math.round((attended / total) * 100) : 0,
-                hodName: hodByDept[st.department_id] || 'Head of Department',
+                hodName: hodByDept[st.batch_id] || 'Head of Batch',
                 subjects: subjectsByStudent[st.id] || [],
                 reportMonth: monthName,
                 reportPeriod: displayRange,

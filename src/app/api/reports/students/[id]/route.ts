@@ -9,7 +9,7 @@ interface StudentDetail {
     first_name: string;
     last_name: string;
     email: string;
-    department_name: string;
+    batch_name: string;
 }
 
 interface SubjectStats {
@@ -67,9 +67,9 @@ export async function GET(
         // Get student basic info
         const studentInfo = await query<StudentDetail>(
             `SELECT s.id, s.student_id, s.roll_number, s.first_name, s.last_name, s.email, 
-                    d.name as department_name
+                    d.name as batch_name
              FROM students s
-             LEFT JOIN departments d ON d.id = s.department_id
+             LEFT JOIN batches d ON d.id = s.batch_id
              WHERE s.id = $1`,
             [studentId]
         );
@@ -250,7 +250,7 @@ export async function GET(
                 rollNumber: student.roll_number,
                 name: `${student.first_name} ${student.last_name}`,
                 email: student.email || 'N/A',
-                department: student.department_name || 'N/A',
+                batch: student.batch_name || 'N/A',
             },
             summary: {
                 totalClasses: parseInt(overall.total_classes) || 0,

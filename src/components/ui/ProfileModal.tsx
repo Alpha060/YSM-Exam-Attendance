@@ -38,8 +38,37 @@ interface ProfileModalProps {
 export function ProfileModal({ isOpen, onClose, user, onLogout }: ProfileModalProps) {
     const [assignedSubjects, setAssignedSubjects] = useState<AssignedSubject[]>([]);
     const [isLoadingSubjects, setIsLoadingSubjects] = useState(false);
+    const [studentSubjects, setStudentSubjects] = useState<any[]>([]);
+    const [isLoadingStudentSubjects, setIsLoadingStudentSubjects] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [isVisible, setIsVisible] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const isStudent = user.role === 'student';
+        if (!isStudent) return;
+
+        const fetchStudentSubjects = async () => {
+            setIsLoadingStudentSubjects(true);
+            try {
+                const token = localStorage.getItem('token');
+                const res = await fetch('/api/student/dashboard', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setStudentSubjects(data.subjects || []);
+                }
+            } catch (error) {
+                console.error('Failed to fetch student subjects in modal:', error);
+            } finally {
+                setIsLoadingStudentSubjects(false);
+            }
+        };
+
+        fetchStudentSubjects();
+    }, [isOpen, user]);
 
     useEffect(() => {
         if (isOpen) {
@@ -146,7 +175,7 @@ export function ProfileModal({ isOpen, onClose, user, onLogout }: ProfileModalPr
                     onClick={(e) => e.stopPropagation()}
                 >
                     {/* Header */}
-                    <div className="bg-gradient-to-br from-blue-600 to-purple-700 p-6 text-white relative flex-shrink-0">
+                    <div className="bg-gradient-to-br from-blue-600 to-indigo-800 p-6 text-white relative flex-shrink-0">
                         <button
                             onClick={onClose}
                             className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-md"
@@ -156,7 +185,7 @@ export function ProfileModal({ isOpen, onClose, user, onLogout }: ProfileModalPr
 
                         <div className="flex flex-col items-center">
                             <div className="w-20 h-20 mb-3 rounded-full bg-white flex items-center justify-center shadow-lg border-4 border-white/20">
-                                <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-blue-600 to-purple-700">
+                                <span className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-br from-blue-600 to-indigo-800">
                                     {getInitials(user.firstName, user.lastName)}
                                 </span>
                             </div>
@@ -198,12 +227,49 @@ export function ProfileModal({ isOpen, onClose, user, onLogout }: ProfileModalPr
                             </div>
                         )}
 
+                        {/* Enrolled Subjects (Students only) */}
+                        {user.role === 'student' && (
+                            <div className="flex flex-col gap-4">
+                                <div className="flex items-center justify-between pb-3 border-b border-gray-100 w-full">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="p-1.5 bg-gradient-to-br from-indigo-50 to-blue-50 text-indigo-600 rounded-lg shadow-inner border border-indigo-100/50">
+                                            <BookOpen className="w-3.5 h-3.5" />
+                                        </div>
+                                        <h3 className="text-[11px] sm:text-xs font-black text-slate-800 uppercase tracking-widest">
+                                            Registered Subjects
+                                        </h3>
+                                    </div>
+                                    {isLoadingStudentSubjects && (
+                                        <span className="flex items-center gap-1.5 text-xs text-blue-500 font-medium animate-pulse">
+                                            <div className="w-3 h-3 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                                            Refreshing...
+                                        </span>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    {studentSubjects.length > 0 ? (
+                                        studentSubjects.map((sub: any) => (
+                                            <div key={sub.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-3">
+                                                <div className="h-2 w-2 rounded-full bg-indigo-500 shrink-0"></div>
+                                                <span className="text-sm font-semibold text-gray-800">{sub.name}</span>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <p className="text-xs text-gray-500 italic text-center py-2">
+                                            No registered subjects found.
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Assigned Subjects (Teachers only) */}
                         {user.role === 'teacher' && (
                             <div className="flex flex-col gap-4">
                                 <div className="flex items-center justify-between pb-3 border-b border-gray-100 w-full">
                                     <div className="flex items-center gap-2.5">
-                                        <div className="p-1.5 bg-gradient-to-br from-indigo-50 to-purple-50 text-indigo-600 rounded-lg shadow-inner border border-indigo-100/50">
+                                        <div className="p-1.5 bg-gradient-to-br from-indigo-50 to-blue-50 text-indigo-600 rounded-lg shadow-inner border border-indigo-100/50">
                                             <BookOpen className="w-3.5 h-3.5" />
                                         </div>
                                         <h3 className="text-[11px] sm:text-xs font-black text-slate-800 uppercase tracking-widest">

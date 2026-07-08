@@ -21,23 +21,23 @@ export async function POST(req: Request) {
             errors: [] as { row: number; name: string; error: string }[]
         };
 
-        // Pre-fetch departments (batches) for validation
-        const deptResult = await client.query('SELECT id, code, name FROM departments');
-        const departmentMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), d.id]));
+        // Pre-fetch batches (batches) for validation
+        const deptResult = await client.query('SELECT id, code, name FROM batches');
+        const batchMap = new Map(deptResult.rows.map((d: any) => [d.code.toUpperCase(), d.id]));
 
-        // Pre-fetch existing subjects by code+department_id (matches unique constraint)
+        // Pre-fetch existing subjects by code+batch_id (matches unique constraint)
         const existingResult = await client.query(
-            'SELECT id, code, department_id FROM subjects'
+            'SELECT id, code, batch_id FROM subjects'
         );
         const existingMap = new Map<string, string>();
         for (const r of existingResult.rows) {
-            existingMap.set(`${r.code.toUpperCase()}|${r.department_id || ''}`, r.id);
+            existingMap.set(`${r.code.toUpperCase()}|${r.batch_id || ''}`, r.id);
         }
 
         await client.query('BEGIN');
 
         // Collect batches for insert
-        const subjectInsertBatch: { code: string; paperCode: string | null; name: string; departmentId: string | null; credits: number }[] = [];
+        const subjectInsertBatch: { code: string; paperCode: string | null; name: string; batchId: string | null; credits: number }[] = [];
 
         for (let i = 0; i < subjects.length; i++) {
             const subject = subjects[i];
@@ -53,21 +53,21 @@ export async function POST(req: Request) {
                 const name = subject.name.trim();
                 const credits = subject.credits ? parseInt(subject.credits) : 3;
 
-                // Resolve department (batch) - required
-                let departmentId: string | null = null;
-                const batchCode = subject.department_code?.trim() || subject.batch_code?.trim() || subject.degree_type?.trim();
+                // Resolve batch (batch) - required
+                let batchId: string | null = null;
+                const batchCode = subject.batch_code?.trim() || subject.batch_code?.trim() || subject.degree_type?.trim();
                 if (batchCode) {
-                    departmentId = departmentMap.get(batchCode.toUpperCase()) || null;
-                    if (!departmentId) {
+                    batchId = batchMap.get(batchCode.toUpperCase()) || null;
+                    if (!batchId) {
                         throw new Error(`Invalid batch code: "${batchCode}"`);
                     }
                 }
 
-                if (!departmentId) {
+                if (!batchId) {
                     throw new Error('Batch code is required');
                 }
 
-                const existingKey = `${code}|${departmentId || ''}`;
+                const existingKey = `${code}|${batchId || ''}`;
                 const existingId = existingMap.get(existingKey);
 
                 if (existingId) {
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
                     throw new Error('Subject with this code already exists in this batch');
                 } else {
                     // New subject
-                    subjectInsertBatch.push({ code, paperCode, name, departmentId, credits });
+                    subjectInsertBatch.push({ code, paperCode, name, batchId, credits });
                     existingMap.set(existingKey, `pending_${code}`);
                 }
 
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
         }
 
         // Batch INSERT new subjects
-        const newSubjectIds = new Map<string, { id: string; departmentId: string | null }>();
+        const newSubjectIds = new Map<string, { id: string; batchId: string | null }>();
         if (subjectInsertBatch.length > 0) {
             const CHUNK_SIZE = 100;
             for (let i = 0; i < subjectInsertBatch.length; i += CHUNK_SIZE) {
@@ -102,17 +102,17 @@ export async function POST(req: Request) {
                 chunk.forEach((s, idx) => {
                     const offset = idx * 5;
                     values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`);
-                    params.push(s.code, s.paperCode, s.name, s.departmentId, s.credits);
+                    params.push(s.code, s.paperCode, s.name, s.batchId, s.credits);
                 });
                 const result = await client.query(
-                    `INSERT INTO subjects (code, paper_code, name, department_id, credits)
+                    `INSERT INTO subjects (code, paper_code, name, batch_id, credits)
                      VALUES ${values.join(', ')}
-                     ON CONFLICT (code, department_id) DO UPDATE SET name = EXCLUDED.name, paper_code = coalesce(EXCLUDED.paper_code, subjects.paper_code)
-                     RETURNING id, code, department_id`,
+                     ON CONFLICT (code, batch_id) DO UPDATE SET name = EXCLUDED.name, paper_code = coalesce(EXCLUDED.paper_code, subjects.paper_code)
+                     RETURNING id, code, batch_id`,
                     params
                 );
                 for (const row of result.rows) {
-                    newSubjectIds.set(row.code, { id: row.id, departmentId: row.department_id });
+                    newSubjectIds.set(row.code, { id: row.id, batchId: row.batch_id });
                 }
             }
         }
@@ -123,14 +123,14 @@ export async function POST(req: Request) {
             const y = now.getFullYear();
             const academicYear = now.getMonth() >= 5 ? `${y}-${y + 1}` : `${y - 1}-${y}`;
 
-            for (const [, { id: subjectId, departmentId }] of newSubjectIds) {
-                if (departmentId) {
+            for (const [, { id: subjectId, batchId }] of newSubjectIds) {
+                if (batchId) {
                     await client.query(
                         `INSERT INTO student_subjects (student_id, subject_id, academic_year)
                          SELECT s.id, $1, $2 FROM students s
-                         WHERE s.department_id = $3 AND s.is_active = true
+                         WHERE s.batch_id = $3 AND s.is_active = true
                          ON CONFLICT (student_id, subject_id, academic_year) DO NOTHING`,
-                        [subjectId, academicYear, departmentId]
+                        [subjectId, academicYear, batchId]
                     );
                 }
             }

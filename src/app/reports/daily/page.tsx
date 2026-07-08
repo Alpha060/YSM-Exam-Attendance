@@ -8,18 +8,20 @@ import { Calendar, Users, UserCheck, UserX, ArrowLeft, Filter, Search, ChevronDo
 import * as XLSX from 'xlsx';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
+import { AccessDenied } from '@/components/ui/access-denied';
 
 
 interface User {
     id: string;
-    role: 'super_admin' | 'teacher';
+    role: 'super_admin' | 'teacher' | 'student';
     firstName: string;
     lastName: string;
     email: string;
-    departmentId?: string;
+    batchId?: string;
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -46,7 +48,7 @@ interface LectureSummary {
     subjectName: string;
     subjectPaperCode: string | null;
     lectureNumber: number;
-    departmentNames: string;
+    batchNames: string;
     teacherName: string;
     totalStudents: number;
     present: number;
@@ -59,7 +61,7 @@ function DailyReportContent() {
     const viewParam = searchParams.get('view') || '';
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [selectedDate, setSelectedDate] = useState(() => {
         const today = new Date();
@@ -68,7 +70,7 @@ function DailyReportContent() {
         const day = String(today.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     });
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [selectedBatchId, setSelectedBatchId] = useState('');
     const [selectedSubjectId, setSelectedSubjectId] = useState('');
 
     const [records, setRecords] = useState<AttendanceRecord[]>([]);
@@ -87,11 +89,11 @@ function DailyReportContent() {
         const parsedUser = JSON.parse(userData);
         setUser(parsedUser);
 
-        // Fetch departments for super_admin or teacher with multiple depts
+        // Fetch batches for super_admin or teacher with multiple depts
         if (parsedUser.role === 'super_admin') {
-            fetchDepartments(token);
+            fetchBatches(token);
         } else if (parsedUser.role === 'teacher') {
-            fetchTeacherDepartments(token, parsedUser.id);
+            fetchTeacherBatches(token, parsedUser.id);
         }
     }, [router]);
 
@@ -102,17 +104,17 @@ function DailyReportContent() {
     };
 
     useEffect(() => {
-        if (departments.length === 1 && !selectedDepartmentId) {
-            setSelectedDepartmentId(departments[0].id);
+        if (batches.length === 1 && !selectedBatchId) {
+            setSelectedBatchId(batches[0].id);
         }
-    }, [departments, selectedDepartmentId]);
+    }, [batches, selectedBatchId]);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token && user) {
             fetchDailyReport(token);
         }
-    }, [selectedDate, selectedDepartmentId, selectedSubjectId, user]);
+    }, [selectedDate, selectedBatchId, selectedSubjectId, user]);
 
     // Fetch subjects when batch changes
     useEffect(() => {
@@ -120,16 +122,16 @@ function DailyReportContent() {
         if (token) {
             fetchSubjects(token);
         }
-    }, [selectedDepartmentId]);
+    }, [selectedBatchId]);
 
-    const getCachedDepartments = () => {
+    const getCachedBatches = () => {
         try {
-            const lCache = localStorage.getItem('offline_departments');
+            const lCache = localStorage.getItem('offline_batches');
             if (lCache) {
                 const parsed = JSON.parse(lCache);
                 if (parsed.data && Array.isArray(parsed.data)) return parsed.data;
             }
-            const sCache = sessionStorage.getItem('cache_departments');
+            const sCache = sessionStorage.getItem('cache_batches');
             if (sCache) {
                 const parsed = JSON.parse(sCache);
                 if (Array.isArray(parsed)) return parsed;
@@ -138,45 +140,45 @@ function DailyReportContent() {
         return null;
     };
 
-    const fetchDepartments = async (token: string) => {
-        const cached = getCachedDepartments();
-        if (cached && cached.length > 0) setDepartments(cached);
+    const fetchBatches = async (token: string) => {
+        const cached = getCachedBatches();
+        if (cached && cached.length > 0) setBatches(cached);
 
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const depts = data.departments || [];
-            setDepartments(depts);
-            try { sessionStorage.setItem('cache_departments', JSON.stringify(depts)); } catch { }
+            const depts = data.batches || [];
+            setBatches(depts);
+            try { sessionStorage.setItem('cache_batches', JSON.stringify(depts)); } catch { }
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
         }
     };
 
-    // Fetch departments for teachers (based on their assignments)
-    const fetchTeacherDepartments = async (token: string, teacherId: string) => {
-        const cached = getCachedDepartments();
-        if (cached && cached.length > 0) setDepartments(cached);
+    // Fetch batches for teachers (based on their assignments)
+    const fetchTeacherBatches = async (token: string, teacherId: string) => {
+        const cached = getCachedBatches();
+        if (cached && cached.length > 0) setBatches(cached);
 
         try {
-            const res = await fetch('/api/me/departments', {
+            const res = await fetch('/api/me/batches', {
                 headers: { Authorization: `Bearer ${token}` },
             });
             const data = await res.json();
-            const depts = data.departments || [];
+            const depts = data.batches || [];
             if (depts.length > 0) {
-                setDepartments(depts);
+                setBatches(depts);
                 try {
-                    localStorage.setItem('offline_departments', JSON.stringify({
+                    localStorage.setItem('offline_batches', JSON.stringify({
                         timestamp: Date.now(),
                         data: depts
                     }));
                 } catch { /* ignore */ }
             }
         } catch (err) {
-            console.error('Error fetching teacher departments:', err);
+            console.error('Error fetching teacher batches:', err);
         }
     };
 
@@ -184,7 +186,7 @@ function DailyReportContent() {
     const fetchSubjects = async (token: string) => {
         try {
             const params = new URLSearchParams();
-            if (selectedDepartmentId) params.append('departmentId', selectedDepartmentId);
+            if (selectedBatchId) params.append('batchId', selectedBatchId);
             let url = '/api/subjects';
             if (params.toString()) url += '?' + params.toString();
             const res = await fetch(url, {
@@ -203,8 +205,8 @@ function DailyReportContent() {
         setLoading(true);
         try {
             let url = `/api/reports/daily?date=${selectedDate}`;
-            if (selectedDepartmentId) {
-                url += `&departmentId=${selectedDepartmentId}`;
+            if (selectedBatchId) {
+                url += `&batchId=${selectedBatchId}`;
             }
             if (selectedSubjectId) {
                 url += `&subjectId=${selectedSubjectId}`;
@@ -265,8 +267,8 @@ function DailyReportContent() {
         try {
             // Fetch detailed data with student names and roll numbers
             let url = `/api/reports/daily?date=${selectedDate}&detailed=true`;
-            if (selectedDepartmentId) {
-                url += `&departmentId=${selectedDepartmentId}`;
+            if (selectedBatchId) {
+                url += `&batchId=${selectedBatchId}`;
             }
 
             if (selectedSubjectId) {
@@ -295,13 +297,13 @@ function DailyReportContent() {
                 return;
             }
 
-            const headers = ['S.No', 'Student ID', 'Roll Number', 'Student Name', 'Department', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
+            const headers = ['S.No', 'Student ID', 'Roll Number', 'Student Name', 'Batch', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
             const rows = filteredRecords.map((r: any, index: number) => [
                 (index + 1).toString(),
                 r.studentCustomId || r.rollNumber,
                 r.rollNumber,
                 r.studentName,
-                r.departmentCode || '',
+                r.batchCode || '',
                 r.subjectPaperCode || r.subjectCode,
                 r.subjectName,
                 `Lecture ${r.lectureNumber}`,
@@ -324,7 +326,7 @@ function DailyReportContent() {
                 link.click();
                 document.body.removeChild(link);
             } else if (format === 'excel') {
-                const headers = ['S.No', 'Student ID', 'Roll Number', 'Student Name', 'Department', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
+                const headers = ['S.No', 'Student ID', 'Roll Number', 'Student Name', 'Batch', 'Paper/Subject Code', 'Subject Name', 'Lecture', 'Status'];
                 const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
                 // Set column widths
                 worksheet['!cols'] = [
@@ -332,7 +334,7 @@ function DailyReportContent() {
                     { wch: 18 }, // Student ID (custom)
                     { wch: 12 }, // Roll Number
                     { wch: 25 }, // Student Name
-                    { wch: 10 }, // Department
+                    { wch: 10 }, // Batch
                     { wch: 12 }, // Subject Code
                     { wch: 30 }, // Subject Name
                     { wch: 10 }, // Lecture
@@ -415,7 +417,7 @@ function DailyReportContent() {
         <div class="filters-info">
             <strong>Filters Applied:</strong> 
             Subject: ${getSelectedSubjectName()} | 
-            Batch: ${selectedDepartmentId ? departments.find(d => d.id === selectedDepartmentId)?.name || 'Selected' : 'All'}
+            Batch: ${selectedBatchId ? batches.find(d => d.id === selectedBatchId)?.name || 'Selected' : 'All'}
         </div>
         <div class="summary-cards">
             <div class="summary-card">
@@ -478,6 +480,11 @@ function DailyReportContent() {
         }
     };
 
+    if (!user) return null;
+
+    if (user.role === 'student') {
+        return <AccessDenied message="Students do not have access to academic reports." />;
+    }
 
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
@@ -620,18 +627,18 @@ function DailyReportContent() {
                         <h3 className="text-sm font-bold text-gray-700">Advanced Filters</h3>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 items-end">
-                        {/* Department Filter */}
-                        {(user?.role === 'super_admin' || departments.length > 1) && (
+                        {/* Batch Filter */}
+                        {(user?.role === 'super_admin' || batches.length > 1) && (
                             <div className="w-full">
                                 <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Batch</label>
                                 <div className="relative">
                                     <select
-                                        value={selectedDepartmentId}
-                                        onChange={(e) => { setSelectedDepartmentId(e.target.value); }}
+                                        value={selectedBatchId}
+                                        onChange={(e) => { setSelectedBatchId(e.target.value); }}
                                         className="w-full pl-4 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 hover:border-blue-300 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none appearance-none transition-all cursor-pointer font-medium"
                                     >
                                         <option value="">All Batches</option>
-                                        {departments.map((dept) => (
+                                        {batches.map((dept) => (
                                             <option key={dept.id} value={dept.id}>{dept.name}</option>
                                         ))}
                                     </select>
@@ -670,7 +677,7 @@ function DailyReportContent() {
                                 className="w-full lg:w-auto mt-6 bg-white hover:bg-red-50 text-gray-600 hover:text-red-600 border-gray-200 hover:border-red-200 rounded-xl transition-colors h-[42px]"
                                 onClick={() => {
 
-                                    setSelectedDepartmentId('');
+                                    setSelectedBatchId('');
                                     setSelectedSubjectId('');
                                 }}
                             >
@@ -829,7 +836,7 @@ function DailyReportContent() {
                                                     <span className="text-sm text-gray-700">{lec.teacherName || '—'}</span>
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <span className="text-sm text-gray-700">{lec.departmentNames || '—'}</span>
+                                                    <span className="text-sm text-gray-700">{lec.batchNames || '—'}</span>
                                                 </td>
                                                 <td className="px-4 py-3 text-center text-sm font-medium text-gray-700">{lec.totalStudents}</td>
                                                 <td className="px-4 py-3 text-center">
@@ -871,7 +878,7 @@ function DailyReportContent() {
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-2 mb-3 text-xs">
-                                            <span className="text-gray-600">{lec.departmentNames || '—'}</span>
+                                            <span className="text-gray-600">{lec.batchNames || '—'}</span>
                                         </div>
                                         {lec.teacherName && (
                                             <div className="flex items-center gap-1.5 mb-3 text-sm font-bold text-gray-800">

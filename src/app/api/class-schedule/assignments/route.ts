@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
-// GET - Fetch assignments for a department on a date
+// GET - Fetch assignments for a batch on a date
 export async function GET(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
         }
 
         const { searchParams } = new URL(request.url);
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
         const date = searchParams.get('date');
 
         if (!date) {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         }
 
         let queryStr = `SELECT 
-                dca.department_id, dca.id, dca.semester, dca.slot_number, dca.teacher_id, dca.subject_id,
+                dca.batch_id, dca.id, dca.semester, dca.slot_number, dca.teacher_id, dca.subject_id,
                 u.first_name as teacher_first_name, u.last_name as teacher_last_name,
                 s.name as subject_name, s.code as subject_code, s.paper_code
              FROM daily_class_assignments dca
@@ -34,24 +34,24 @@ export async function GET(request: NextRequest) {
         const params: any[] = [date];
         let paramIndex = 2;
 
-        if (departmentId) {
-            queryStr += ` AND dca.department_id = $${paramIndex}`;
-            params.push(departmentId);
+        if (batchId) {
+            queryStr += ` AND dca.batch_id = $${paramIndex}`;
+            params.push(batchId);
             paramIndex++;
         } else if (payload.role === 'super_admin') {
-            queryStr += ` AND dca.department_id IN (
-                SELECT department_id FROM user_departments WHERE user_id = $${paramIndex}
+            queryStr += ` AND dca.batch_id IN (
+                SELECT batch_id FROM user_batches WHERE user_id = $${paramIndex}
                 UNION
-                SELECT department_id FROM users WHERE id = $${paramIndex}
+                SELECT batch_id FROM users WHERE id = $${paramIndex}
             )`;
             params.push(payload.userId);
             paramIndex++;
         }
         
-        queryStr += ` ORDER BY dca.department_id, dca.semester, dca.slot_number`;
+        queryStr += ` ORDER BY dca.batch_id, dca.semester, dca.slot_number`;
 
         const assignments = await query<{
-            department_id: string;
+            batch_id: string;
             id: string;
             semester: number;
             slot_number: number;
@@ -87,10 +87,10 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { departmentId, date, assignments } = await request.json();
+        const { batchId, date, assignments } = await request.json();
 
-        if (!departmentId || !date || !assignments || !Array.isArray(assignments)) {
-            return NextResponse.json({ error: 'departmentId, date, and assignments required' }, { status: 400 });
+        if (!batchId || !date || !assignments || !Array.isArray(assignments)) {
+            return NextResponse.json({ error: 'batchId, date, and assignments required' }, { status: 400 });
         }
 
         // Block assignments on Sundays
@@ -102,24 +102,24 @@ export async function POST(request: NextRequest) {
         // Block assignments on holidays
         const holidayCheck = await query<{ id: string }>(
             `SELECT id FROM holidays
-             WHERE date = $1 AND (department_id IS NULL OR department_id = $2)
+             WHERE date = $1 AND (batch_id IS NULL OR batch_id = $2)
              LIMIT 1`,
-            [date, departmentId]
+            [date, batchId]
         );
         if (holidayCheck.length > 0) {
             return NextResponse.json({ error: 'Cannot assign classes on a holiday' }, { status: 400 });
         }
 
-        // HOD must own the department
+        // HOD must own the batch
         if (payload.role === 'super_admin') {
-            const owned = await query<{ department_id: string }>(
-                `SELECT department_id FROM user_departments WHERE user_id = $1 AND department_id = $2
+            const owned = await query<{ batch_id: string }>(
+                `SELECT batch_id FROM user_batches WHERE user_id = $1 AND batch_id = $2
                  UNION
-                 SELECT department_id FROM users WHERE id = $1 AND department_id = $2`,
-                [payload.userId, departmentId]
+                 SELECT batch_id FROM users WHERE id = $1 AND batch_id = $2`,
+                [payload.userId, batchId]
             );
             if (owned.length === 0) {
-                return NextResponse.json({ error: 'Access denied for this department' }, { status: 403 });
+                return NextResponse.json({ error: 'Access denied for this batch' }, { status: 403 });
             }
         }
 
@@ -128,11 +128,11 @@ export async function POST(request: NextRequest) {
             if (!a.semester || !a.slotNumber || !a.teacherId || !a.subjectId) continue;
 
             await query(
-                `INSERT INTO daily_class_assignments (department_id, semester, slot_number, teacher_id, subject_id, date, created_by)
+                `INSERT INTO daily_class_assignments (batch_id, semester, slot_number, teacher_id, subject_id, date, created_by)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)
-                 ON CONFLICT (department_id, semester, slot_number, date)
+                 ON CONFLICT (batch_id, semester, slot_number, date)
                  DO UPDATE SET teacher_id = $4, subject_id = $5, created_by = $7, created_at = CURRENT_TIMESTAMP`,
-                [departmentId, a.semester, a.slotNumber, a.teacherId, a.subjectId, date, payload.userId]
+                [batchId, a.semester, a.slotNumber, a.teacherId, a.subjectId, date, payload.userId]
             );
             upsertCount++;
         }
@@ -161,25 +161,25 @@ export async function DELETE(request: NextRequest) {
         }
 
         const { searchParams } = new URL(request.url);
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
         const date = searchParams.get('date');
         const semester = searchParams.get('semester');
         const slotNumber = searchParams.get('slotNumber');
 
-        if (!departmentId || !date) {
-            return NextResponse.json({ error: 'departmentId and date required' }, { status: 400 });
+        if (!batchId || !date) {
+            return NextResponse.json({ error: 'batchId and date required' }, { status: 400 });
         }
 
-        // HOD must own the department
+        // HOD must own the batch
         if (payload.role === 'super_admin') {
-            const owned = await query<{ department_id: string }>(
-                `SELECT department_id FROM user_departments WHERE user_id = $1 AND department_id = $2
+            const owned = await query<{ batch_id: string }>(
+                `SELECT batch_id FROM user_batches WHERE user_id = $1 AND batch_id = $2
                  UNION
-                 SELECT department_id FROM users WHERE id = $1 AND department_id = $2`,
-                [payload.userId, departmentId]
+                 SELECT batch_id FROM users WHERE id = $1 AND batch_id = $2`,
+                [payload.userId, batchId]
             );
             if (owned.length === 0) {
-                return NextResponse.json({ error: 'Access denied for this department' }, { status: 403 });
+                return NextResponse.json({ error: 'Access denied for this batch' }, { status: 403 });
             }
         }
 
@@ -187,14 +187,14 @@ export async function DELETE(request: NextRequest) {
             // Delete specific cell
             await query(
                 `DELETE FROM daily_class_assignments
-                 WHERE department_id = $1 AND date = $2 AND semester = $3 AND slot_number = $4`,
-                [departmentId, date, parseInt(semester), parseInt(slotNumber)]
+                 WHERE batch_id = $1 AND date = $2 AND semester = $3 AND slot_number = $4`,
+                [batchId, date, parseInt(semester), parseInt(slotNumber)]
             );
         } else {
             // Clear all assignments for dept + date
             await query(
-                `DELETE FROM daily_class_assignments WHERE department_id = $1 AND date = $2`,
-                [departmentId, date]
+                `DELETE FROM daily_class_assignments WHERE batch_id = $1 AND date = $2`,
+                [batchId, date]
             );
         }
 

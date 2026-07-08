@@ -39,13 +39,21 @@ interface Student {
     first_name: string;
     last_name: string;
     email: string | null;
-    department_id: string;
+    phone?: string | null;
+    dob?: string | null;
+    gender?: string | null;
+    guardianName?: string | null;
+    address?: string | null;
+    state?: string | null;
+    pincode?: string | null;
+    batch_id: string;
     current_semester: number;
-    department_code: string;
-    department_name: string;
+    batch_code: string;
+    batch_name: string;
+    batch_year?: number;
 }
 
-interface Department {
+interface Batch {
     id: string;
     name: string;
     code: string;
@@ -56,7 +64,7 @@ interface Subject {
     id: string;
     code: string;
     name: string;
-    departmentId: string;
+    batchId: string;
 }
 
 interface User {
@@ -64,13 +72,13 @@ interface User {
     lastName: string;
     email: string;
     role: 'super_admin' | 'teacher';
-    departmentId?: string;
+    batchId?: string;
 }
 
 export default function StudentsPage() {
     const router = useRouter();
     const [students, setStudents] = useState<Student[]>([]);
-    const [departments, setDepartments] = useState<Department[]>([]);
+    const [batches, setBatches] = useState<Batch[]>([]);
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [loading, setLoading] = useState(true);
     const [user, setUser] = useState<User | null>(null);
@@ -84,16 +92,27 @@ export default function StudentsPage() {
     const [formData, setFormData] = useState({
         studentId: '',
         rollNumber: '',
-        name: '',
+        firstName: '',
+        lastName: '',
         email: '',
-        departmentId: ''
+        batchId: '',
+        batchYear: new Date().getFullYear().toString(),
+        phone: '',
+        dob: '',
+        gender: 'male',
+        guardianName: '',
+        address: '',
+        state: '',
+        pincode: '',
+        password: '',
+        confirmPassword: ''
     });
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
     const [parsedInfo, setParsedInfo] = useState<ParsedCoachingId | null>(null);
 
     // Filter States
     const [searchTerm, setSearchTerm] = useState('');
-    const [filterDepartmentId, setFilterDepartmentId] = useState('');
+    const [filterBatchId, setFilterBatchId] = useState('');
 
 
     // Import States
@@ -122,31 +141,31 @@ export default function StudentsPage() {
                 setStudents(JSON.parse(cachedStudents));
                 setLoading(false);
             }
-            const lCache = localStorage.getItem('offline_departments');
+            const lCache = localStorage.getItem('offline_batches');
             if (lCache) {
                 const parsed = JSON.parse(lCache);
-                if (parsed.data && Array.isArray(parsed.data)) setDepartments(parsed.data);
+                if (parsed.data && Array.isArray(parsed.data)) setBatches(parsed.data);
             } else {
-                const cachedDepts = sessionStorage.getItem('cache_departments');
-                if (cachedDepts) setDepartments(JSON.parse(cachedDepts));
+                const cachedDepts = sessionStorage.getItem('cache_batches');
+                if (cachedDepts) setBatches(JSON.parse(cachedDepts));
             }
             const cachedSubjects = sessionStorage.getItem('cache_subjects');
             if (cachedSubjects) setSubjects(JSON.parse(cachedSubjects));
         } catch { /* ignore cache errors */ }
 
         fetchStudents(token);
-        fetchDepartments(token);
+        fetchBatches(token);
         fetchSubjects(token);
     }, [router]);
 
     // Real-time updates: silently re-fetch when DB tables change
     useRealtimeData({
-        tables: ['students', 'student_subjects', 'departments', 'subjects'],
+        tables: ['students', 'student_subjects', 'batches', 'subjects'],
         onTableChange: useCallback(() => {
             const token = localStorage.getItem('token');
             if (token) {
                 fetchStudents(token);
-                fetchDepartments(token);
+                fetchBatches(token);
                 fetchSubjects(token);
             }
         }, []),
@@ -182,19 +201,19 @@ export default function StudentsPage() {
         setLoading(false);
     };
 
-    const fetchDepartments = async (token: string) => {
+    const fetchBatches = async (token: string) => {
         try {
-            const res = await fetch('/api/departments', {
+            const res = await fetch('/api/batches', {
                 cache: 'no-store',
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.status === 401) { router.replace('/login'); return; }
             const data = await safeJson(res);
-            const deptsList = data?.departments || [];
-            setDepartments(deptsList);
-            try { sessionStorage.setItem('cache_departments', JSON.stringify(deptsList)); } catch {}
+            const deptsList = data?.batches || [];
+            setBatches(deptsList);
+            try { sessionStorage.setItem('cache_batches', JSON.stringify(deptsList)); } catch {}
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
         }
     };
 
@@ -227,9 +246,20 @@ export default function StudentsPage() {
         setFormData({
             studentId: student.student_id || '',
             rollNumber: student.roll_number,
-            name: [student.first_name, student.last_name].filter(Boolean).join(' ').trim(),
+            firstName: student.first_name || '',
+            lastName: student.last_name || '',
             email: student.email || '',
-            departmentId: student.department_id
+            batchId: student.batch_id || '',
+            batchYear: student.batch_year ? student.batch_year.toString() : new Date().getFullYear().toString(),
+            phone: student.phone || '',
+            dob: student.dob ? student.dob.split('T')[0] : '',
+            gender: student.gender || 'male',
+            guardianName: student.guardianName || '',
+            address: student.address || '',
+            state: student.state || '',
+            pincode: student.pincode || '',
+            password: '',
+            confirmPassword: ''
         });
         setSelectedStudentId(student.id);
         setShowModal(true);
@@ -241,9 +271,20 @@ export default function StudentsPage() {
         setFormData({
             studentId: '',
             rollNumber: '',
-            name: '',
+            firstName: '',
+            lastName: '',
             email: '',
-            departmentId: ''
+            batchId: '',
+            batchYear: new Date().getFullYear().toString(),
+            phone: '',
+            dob: '',
+            gender: 'male',
+            guardianName: '',
+            address: '',
+            state: '',
+            pincode: '',
+            password: '',
+            confirmPassword: ''
         });
         setCoachingId('');
         setBatchWarning('');
@@ -274,17 +315,17 @@ export default function StudentsPage() {
             }
 
             // Auto-fill batch from coaching ID prefix using longest-match
-            if (parsed.batchPrefix && departments.length > 0) {
-                const batchCodes = departments.map(d => d.code);
+            if (parsed.batchPrefix && batches.length > 0) {
+                const batchCodes = batches.map(d => d.code);
                 const matchedCode = matchBatchCode(id, batchCodes);
                 if (matchedCode) {
-                    const matchedDept = departments.find(d => d.code.toUpperCase() === matchedCode.toUpperCase());
+                    const matchedDept = batches.find(d => d.code.toUpperCase() === matchedCode.toUpperCase());
                     if (matchedDept) {
                         if (matchedDept.status === 'completed') {
                             setBatchWarning(`Batch "${matchedDept.name} (${matchedDept.code})" is completed. Cannot add students to it.`);
-                            setFormData(prev => ({ ...prev, departmentId: '' }));
+                            setFormData(prev => ({ ...prev, batchId: '' }));
                         } else {
-                            setFormData(prev => ({ ...prev, departmentId: matchedDept.id }));
+                            setFormData(prev => ({ ...prev, batchId: matchedDept.id }));
                         }
                     }
                 }
@@ -297,10 +338,10 @@ export default function StudentsPage() {
     const autoSelectSubjects = (parsed: ParsedStudentId, semester: number, deptId: string) => {
         if (!parsed.isValid) return;
 
-        const selectedDept = departments.find(d => d.id === deptId);
+        const selectedDept = batches.find(d => d.id === deptId);
         if (!selectedDept) return;
 
-        // Get subjects that match the department's degree type and semester
+        // Get subjects that match the batch's degree type and semester
         const availableSubjects = subjects.filter(s =>
             s.semesters.includes(semester) && s.degreeType === selectedDept.degree_type
         );
@@ -412,8 +453,13 @@ export default function StudentsPage() {
         setSuccess('');
         const token = localStorage.getItem('token');
 
-        if (!formData.departmentId) {
+        if (!formData.batchId) {
             setError('Please select a batch');
+            return;
+        }
+
+        if (formData.password && formData.password !== formData.confirmPassword) {
+            setError('Passwords do not match');
             return;
         }
 
@@ -428,13 +474,21 @@ export default function StudentsPage() {
                     },
                     body: JSON.stringify({
                         id: selectedStudentId,
-                        ...(() => {
-                            const parts = formData.name.trim().split(/\s+/);
-                            const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
-                            const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
-                            return { ...formData, firstName, lastName };
-                        })(),
+                        studentId: formData.studentId,
                         coachingId: coachingId || undefined,
+                        firstName: formData.firstName,
+                        lastName: formData.lastName,
+                        email: formData.email || undefined,
+                        batchId: formData.batchId,
+                        batchYear: formData.batchYear,
+                        phone: formData.phone || undefined,
+                        dob: formData.dob || undefined,
+                        gender: formData.gender,
+                        guardianName: formData.guardianName || undefined,
+                        address: formData.address || undefined,
+                        state: formData.state || undefined,
+                        pincode: formData.pincode || undefined,
+                        password: formData.password || undefined
                     }),
                 });
 
@@ -453,13 +507,21 @@ export default function StudentsPage() {
                         Authorization: `Bearer ${token}`,
                     },
                     body: JSON.stringify({
-                        ...(() => {
-                            const parts = formData.name.trim().split(/\s+/);
-                            const firstName = parts.length > 1 ? parts.slice(0, -1).join(' ') : parts[0];
-                            const lastName = parts.length > 1 ? parts[parts.length - 1] : '';
-                            return { ...formData, firstName, lastName };
-                        })(),
+                        studentId: formData.studentId,
                         coachingId: coachingId || undefined,
+                        firstName: formData.firstName,
+                        lastName: formData.lastName,
+                        email: formData.email || undefined,
+                        batchId: formData.batchId,
+                        batchYear: formData.batchYear,
+                        phone: formData.phone || undefined,
+                        dob: formData.dob || undefined,
+                        gender: formData.gender,
+                        guardianName: formData.guardianName || undefined,
+                        address: formData.address || undefined,
+                        state: formData.state || undefined,
+                        pincode: formData.pincode || undefined,
+                        password: formData.password || undefined
                     }),
                 });
 
@@ -507,7 +569,7 @@ export default function StudentsPage() {
 
     // Get subjects count for a batch
     const getBatchSubjectCount = (deptId: string) => {
-        return subjects.filter(s => s.departmentId === deptId).length;
+        return subjects.filter(s => s.batchId === deptId).length;
     };
 
     // Import Logic
@@ -558,12 +620,10 @@ export default function StudentsPage() {
 
     // Template for coaching center students
     const downloadCoachingTemplate = () => {
-        const headers = ['student_id*', 'coaching_id', 'name*', 'email', 'batch_code*'];
+        const headers = ['student_id*', 'coaching_id', 'name*', 'email', 'batch_code*', 'phone', 'dob', 'gender', 'guardian_name', 'address', 'state', 'pincode'];
         const dummyData = [
-            ['BCA2025SC001', 'lks2026001', 'John Doe', 'john@example.com', 'LKS'],
-            ['BSC2025PHY002', 'lks2026002', 'Jane Smith', 'jane@example.com', 'LKS'],
-            ['BA2025HIS003', 'arb2026001', 'Bob Wilson', 'bob@example.com', 'ARB'],
-            ['BCOM2025COM004', 'arb2026002', 'Alice Brown', 'alice@example.com', 'ARB']
+            ['BCA2025SC001', 'lks2026001', 'John Doe', 'john@example.com', 'LKS', '9876543210', '2005-05-15', 'male', 'Richard Doe', '123 Academic Lane', 'Jharkhand', '834001'],
+            ['BSC2025PHY002', 'lks2026002', 'Jane Smith', 'jane@example.com', 'LKS', '9876543211', '2005-08-20', 'female', 'Mary Smith', '456 College Road', 'Jharkhand', '834002']
         ];
         const csvContent = [headers.join(','), ...dummyData.map(row => row.join(','))].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -585,8 +645,15 @@ export default function StudentsPage() {
             'last name': 'last_name', 'lastname': 'last_name', 'surname': 'last_name',
             'last_name*': 'last_name', 'lastname*': 'last_name',
             'email': 'email', 'email address': 'email', 'email*': 'email',
-            'department': 'department_code', 'dept': 'department_code', 'course': 'department_code',
+            'batch': 'batch_code', 'dept': 'batch_code', 'course': 'batch_code',
             'semester': 'semester', 'sem': 'semester',
+            'phone': 'phone', 'phonenumber': 'phone', 'phone number': 'phone', 'contact': 'phone', 'mobile': 'phone',
+            'dob': 'dob', 'dateofbirth': 'dob', 'date of birth': 'dob', 'birthdate': 'dob',
+            'gender': 'gender', 'sex': 'gender',
+            'guardianname': 'guardian_name', 'guardian name': 'guardian_name', 'guardian': 'guardian_name', 'parent': 'guardian_name', 'parentname': 'guardian_name', 'parent name': 'guardian_name', 'guardian_name': 'guardian_name',
+            'address': 'address', 'street': 'address', 'streetaddress': 'address', 'street address': 'address',
+            'state': 'state',
+            'pincode': 'pincode', 'pin': 'pincode', 'zip': 'pincode', 'zipcode': 'pincode', 'pin code': 'pincode',
             // Subject columns - Regular
             'major_subject': 'major', 'majorsubject': 'major', 'major subject': 'major', 'major': 'major', 'major*': 'major',
             'minor': 'minor', 'minor subject': 'minor',
@@ -702,8 +769,8 @@ export default function StudentsPage() {
 
     if (loading) return <PageSkeleton type="students" />;
 
-    if (user?.role === 'teacher') {
-        return <AccessDenied message="Teachers do not have access to the Students page." />;
+    if (user?.role !== 'super_admin') {
+        return <AccessDenied message="Only admins have access to the Students page." />;
     }
 
     const filteredStudents = students.filter(student => {
@@ -713,7 +780,7 @@ export default function StudentsPage() {
             (student.student_id?.includes(searchTerm)) ||
             (student.coaching_id?.toUpperCase().includes(searchTerm.toUpperCase()));
 
-        const matchesDept = !filterDepartmentId || student.department_id === filterDepartmentId;
+        const matchesDept = !filterBatchId || student.batch_id === filterBatchId;
 
         return matchesSearch && matchesDept;
     }).sort((a, b) =>
@@ -781,15 +848,15 @@ export default function StudentsPage() {
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-6">
                     {/* Filters */}
                 <div className="md:col-span-4 flex gap-2">
-                            {departments.length > 1 && (
+                            {batches.length > 1 && (
                                 <div className="relative w-full">
                                     <select
                                         className="w-full bg-white border border-gray-200 rounded-xl pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 appearance-none cursor-pointer"
-                                        value={filterDepartmentId}
-                                        onChange={(e) => setFilterDepartmentId(e.target.value)}
+                                        value={filterBatchId}
+                                        onChange={(e) => setFilterBatchId(e.target.value)}
                                     >
                                         <option value="">All Batches</option>
-                                        {departments.map((dept) => (
+                                        {batches.map((dept) => (
                                             <option key={dept.id} value={dept.id}>{dept.name} ({dept.code})</option>
                                         ))}
                                     </select>
@@ -846,17 +913,17 @@ export default function StudentsPage() {
                                                     <div>
                                                         <div className="flex items-center gap-2 flex-wrap">
                                                             <div className="font-semibold text-gray-900">{student.first_name} {student.last_name}</div>
-                                                            {student.department_code && (
+                                                            {student.batch_code && (
                                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-100">
-                                                                    {student.department_code}
+                                                                    {student.batch_code}
                                                                 </span>
                                                             )}
                                                             <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                                                {student.department_name || student.department_code}
+                                                                {student.batch_name || student.batch_code}
                                                             </span>
                                                         </div>
                                                         <div className="text-xs text-gray-500 font-mono mt-0.5">
-                                                            {student.coaching_id && <span>UID: {student.coaching_id} • </span>}ID: {student.student_id || 'N/A'} • Roll: {student.roll_number}
+                                                            {student.coaching_id && <span>Student ID: {student.coaching_id} • </span>}College ID: {student.student_id || 'N/A'} • Roll: {student.roll_number}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -894,10 +961,15 @@ export default function StudentsPage() {
                                             <div>
                                                 <h3 className="font-semibold text-gray-900">{student.first_name} {student.last_name}</h3>
                                                 <div className="flex flex-wrap items-center gap-2 mt-1">
-                                                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                                                        ID: {student.student_id || 'N/A'}
+                                                    {student.coaching_id && (
+                                                        <span className="text-[10px] font-medium text-purple-700 bg-purple-50 border border-purple-100 px-2 py-0.5 rounded">
+                                                            {student.coaching_id}
+                                                        </span>
+                                                    )}
+                                                    <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                                        College: {student.student_id || 'N/A'}
                                                     </span>
-                                                    <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                                    <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                                                         Roll: {student.roll_number}
                                                     </span>
                                                 </div>
@@ -922,7 +994,7 @@ export default function StudentsPage() {
                                                 </span>
                                             )}
                                             <span className="text-xs font-medium text-purple-700 bg-purple-50 px-2 py-1 rounded border border-purple-100">
-                                                {student.department_name || student.department_code}
+                                                {student.batch_name || student.batch_code}
                                             </span>
                                         </div>
                                 </div>
@@ -953,7 +1025,7 @@ export default function StudentsPage() {
             {/* Add/Edit Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
-                    <Card className="w-full max-w-lg max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl border-0">
+                    <Card className="w-full max-w-2xl max-h-[90vh] flex flex-col bg-white rounded-2xl shadow-2xl border-0">
                         <CardHeader className="bg-gray-50/50 border-b border-gray-100 pb-4 shrink-0 rounded-t-2xl">
                             <div className="flex justify-between items-center">
                                 <CardTitle className="text-xl">{selectedStudentId ? 'Edit Student' : 'Add New Student'}</CardTitle>
@@ -963,143 +1035,244 @@ export default function StudentsPage() {
                             </div>
                         </CardHeader>
                         <CardContent className="overflow-y-auto pt-6 custom-scrollbar">
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <Label htmlFor="studentId" className="flex items-center gap-2">
-                                            Student ID *
-                                            {parsedInfo?.isValid && (
-                                                <span className="flex items-center gap-1 text-emerald-600 text-xs font-normal">
-                                                    <CheckCircle2 className="w-3 h-3" />
-                                                    Auto-detected
-                                                </span>
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                {/* Section 1: Academic & Account Info */}
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">1. Academic & Account Info</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <Label htmlFor="firstName">First Name <span className="text-red-500">*</span></Label>
+                                            <Input
+                                                id="firstName"
+                                                value={formData.firstName}
+                                                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                                                placeholder="John"
+                                                className="rounded-xl border-gray-200"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="lastName">Last Name</Label>
+                                            <Input
+                                                id="lastName"
+                                                value={formData.lastName}
+                                                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                                                placeholder="Doe"
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="email">Email</Label>
+                                            <Input
+                                                id="email"
+                                                type="email"
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                placeholder="john.doe@example.com"
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="phone">Phone Number</Label>
+                                            <Input
+                                                id="phone"
+                                                type="tel"
+                                                value={formData.phone}
+                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                                placeholder="+91 98765 43210"
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="studentId">College ID <span className="text-red-500">*</span></Label>
+                                            <Input
+                                                id="studentId"
+                                                value={formData.studentId}
+                                                onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                                                placeholder="e.g. BCA2025SC061"
+                                                className="rounded-xl border-gray-200"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="coachingId" className="flex items-center gap-2">
+                                                Student ID (Auto/Optional)
+                                                {parsedInfo?.isValid && (
+                                                    <span className="flex items-center gap-1 text-emerald-600 text-xs font-normal">
+                                                        <CheckCircle2 className="w-3 h-3" />
+                                                        Auto-detected
+                                                    </span>
+                                                )}
+                                            </Label>
+                                            <Input
+                                                id="coachingId"
+                                                value={coachingId}
+                                                onChange={(e) => handleCoachingIdChange(e.target.value)}
+                                                placeholder="e.g. LKS2026001"
+                                                className={`rounded-xl border-gray-200 uppercase ${parsedInfo?.isValid && !batchWarning ? 'border-emerald-300 bg-emerald-50/30' : ''} ${batchWarning ? 'border-red-300 bg-red-50/30' : ''}`}
+                                            />
+                                            {parsedInfo?.error && coachingId.length >= 7 && (
+                                                <p className="text-amber-600 text-xs mt-1">⚠️ {parsedInfo.error}</p>
                                             )}
-                                        </Label>
-                                        <Input
-                                            id="studentId"
-                                            value={formData.studentId}
-                                            onChange={(e) => setFormData({ ...formData, studentId: e.target.value.toUpperCase() })}
-                                            placeholder="e.g., BCA2025SC001"
-                                            className={`rounded-xl border-gray-200 uppercase`}
-                                            required
-                                        />
-                                    </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <Label htmlFor="coachingId" className="flex items-center gap-2">
-                                            Coaching ID
-                                            {parsedInfo?.isValid && (
-                                                <span className="flex items-center gap-1 text-emerald-600 text-xs font-normal">
-                                                    <CheckCircle2 className="w-3 h-3" />
-                                                    Auto-detected
-                                                </span>
+                                            {batchWarning && (
+                                                <p className="text-red-600 text-xs mt-1 font-medium">🚫 {batchWarning}</p>
                                             )}
-                                        </Label>
-                                        <Input
-                                            id="coachingId"
-                                            value={coachingId}
-                                            onChange={(e) => handleCoachingIdChange(e.target.value)}
-                                            placeholder="e.g., LKS2026001"
-                                            className={`rounded-xl border-gray-200 uppercase ${parsedInfo?.isValid && !batchWarning ? 'border-emerald-300 bg-emerald-50/30' : ''} ${batchWarning ? 'border-red-300 bg-red-50/30' : ''} ${parsedInfo && !parsedInfo.isValid && coachingId.length >= 7 ? 'border-amber-300' : ''}`}
-                                        />
-                                        {parsedInfo?.error && coachingId.length >= 7 && (
-                                            <p className="text-amber-600 text-xs mt-1">⚠️ {parsedInfo.error}</p>
+                                        </div>
+                                        {selectedStudentId && (
+                                            <div>
+                                                <Label htmlFor="rollNumber">Roll Number</Label>
+                                                <Input
+                                                    id="rollNumber"
+                                                    value={formData.rollNumber}
+                                                    disabled
+                                                    className="rounded-xl border-gray-200 bg-gray-100 text-gray-500 font-medium"
+                                                />
+                                            </div>
                                         )}
-                                        {batchWarning && (
-                                            <p className="text-red-600 text-xs mt-1 font-medium">🚫 {batchWarning}</p>
-                                        )}
-                                    </div>
-                                    <div className="col-span-2 sm:col-span-1">
-                                        <Label htmlFor="rollNumber" className="flex items-center gap-2">
-                                            Roll Number *
-                                            {parsedInfo?.rollNumber && (
-                                                <span className="text-gray-400 text-xs font-normal">(auto-filled)</span>
-                                            )}
-                                        </Label>
-                                        <Input
-                                            id="rollNumber"
-                                            type="number"
-                                            value={formData.rollNumber}
-                                            onChange={(e) => setFormData({ ...formData, rollNumber: e.target.value })}
-                                            placeholder="e.g., 21"
-                                            className="rounded-xl border-gray-200"
-                                            required
-                                        />
+                                        <div>
+                                            <Label htmlFor="batchId">Batch <span className="text-red-500">*</span></Label>
+                                            <select
+                                                id="batchId"
+                                                className="w-full p-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:outline-none disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed bg-white h-[42px] text-sm"
+                                                value={formData.batchId}
+                                                onChange={(e) => setFormData({ ...formData, batchId: e.target.value })}
+                                                required
+                                                disabled={!!(parsedInfo?.isValid && parsedInfo?.batchPrefix && !batchWarning)}
+                                            >
+                                                <option value="">Select Batch</option>
+                                                {batches
+                                                    .filter(dept => dept.status !== 'completed')
+                                                    .map((dept) => (
+                                                        <option key={dept.id} value={dept.id}>{dept.code} - {dept.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="batchYear">Batch Year</Label>
+                                            <Input
+                                                id="batchYear"
+                                                type="number"
+                                                value={formData.batchYear}
+                                                onChange={(e) => setFormData({ ...formData, batchYear: e.target.value })}
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
-                                {/* Parsed Info Display */}
-                                {parsedInfo?.isValid && (
-                                    <div className="p-3 bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-200 rounded-xl">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <Sparkles className="w-4 h-4 text-emerald-600" />
-                                            <span className="text-sm font-medium text-emerald-800">Detected Information</span>
+                                {/* Section 2: Password credentials (optional) */}
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">2. Login Password (Optional)</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <Label htmlFor="password">Password</Label>
+                                            <Input
+                                                id="password"
+                                                type="password"
+                                                value={formData.password}
+                                                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                                placeholder={selectedStudentId ? "Leave blank to keep current" : "Min 6 characters"}
+                                                className="rounded-xl border-gray-200"
+                                            />
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {parsedInfo.batchPrefix && (
-                                                <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded-full font-medium">
-                                                    Batch: {parsedInfo.batchPrefix.toUpperCase()}
-                                                </span>
-                                            )}
-                                            {parsedInfo.year && (
-                                                <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
-                                                    Year: {parsedInfo.year}
-                                                </span>
-                                            )}
-                                            <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded-full">
-                                                Roll: {parsedInfo.rollNumber}
-                                            </span>
+                                        <div>
+                                            <Label htmlFor="confirmPassword">Confirm Password</Label>
+                                            <Input
+                                                id="confirmPassword"
+                                                type="password"
+                                                value={formData.confirmPassword}
+                                                onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                                placeholder={selectedStudentId ? "Leave blank to keep current" : "Confirm password"}
+                                                className="rounded-xl border-gray-200"
+                                            />
                                         </div>
                                     </div>
-                                )}
-                                <div>
-                                    <Label htmlFor="studentName">Name *</Label>
-                                    <Input
-                                        id="studentName"
-                                        value={formData.name}
-                                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                        placeholder="Full name"
-                                        className="rounded-xl border-gray-200"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <Label htmlFor="email">Email</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        placeholder="student@college.edu"
-                                        className="rounded-xl border-gray-200"
-                                    />
                                 </div>
 
-                                <div>
-                                    <Label htmlFor="departmentId">Batch *</Label>
-                                    <select
-                                        id="departmentId"
-                                        className="w-full p-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:outline-none disabled:bg-gray-50 disabled:text-gray-500 disabled:cursor-not-allowed bg-white"
-                                        value={formData.departmentId}
-                                        onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
-                                        required
-                                        disabled={!!(parsedInfo?.isValid && parsedInfo?.batchPrefix && !batchWarning)}
-                                    >
-                                        <option value="">Select Batch</option>
-                                        {departments
-                                            .filter(dept => dept.status !== 'completed')
-                                            .map((dept) => (
-                                                <option key={dept.id} value={dept.id}>{dept.code} - {dept.name}</option>
-                                        ))}
-                                    </select>
+                                {/* Section 3: Personal Info */}
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">3. Personal Details</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div>
+                                            <Label htmlFor="dob">Date of Birth</Label>
+                                            <Input
+                                                id="dob"
+                                                type="date"
+                                                value={formData.dob}
+                                                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="gender">Gender</Label>
+                                            <select
+                                                id="gender"
+                                                className="w-full p-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:outline-none bg-white h-[42px] text-sm"
+                                                value={formData.gender}
+                                                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                                            >
+                                                <option value="male">Male</option>
+                                                <option value="female">Female</option>
+                                                <option value="other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-span-1 sm:col-span-2">
+                                            <Label htmlFor="guardianName">Guardian / Parent Name</Label>
+                                            <Input
+                                                id="guardianName"
+                                                value={formData.guardianName}
+                                                onChange={(e) => setFormData({ ...formData, guardianName: e.target.value })}
+                                                placeholder="Mr. Richard Doe"
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Section 4: Address Details */}
+                                <div className="space-y-4">
+                                    <h3 className="text-sm font-semibold text-gray-900 border-b pb-2">4. Contact Address</h3>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="col-span-1 sm:col-span-2">
+                                            <Label htmlFor="address">Street Address</Label>
+                                            <Input
+                                                id="address"
+                                                value={formData.address}
+                                                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                                placeholder="123 Academic Lane, Ranchi"
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="state">State</Label>
+                                            <Input
+                                                id="state"
+                                                value={formData.state}
+                                                onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                                                placeholder="Jharkhand"
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="pincode">Pin Code</Label>
+                                            <Input
+                                                id="pincode"
+                                                value={formData.pincode}
+                                                onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
+                                                placeholder="834001"
+                                                className="rounded-xl border-gray-200"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Auto-assigned Subjects Info */}
-                                {formData.departmentId ? (
+                                {formData.batchId ? (
                                     <div className="pt-4 border-t">
                                         <Label className="font-medium">Subjects</Label>
                                         {(() => {
-                                            const count = getBatchSubjectCount(formData.departmentId);
-                                            const dept = departments.find(d => d.id === formData.departmentId);
+                                            const count = getBatchSubjectCount(formData.batchId);
+                                            const dept = batches.find(d => d.id === formData.batchId);
                                             return count > 0 ? (
                                                 <div className="mt-2 p-4 bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-200 rounded-xl">
                                                     <div className="flex items-center gap-2 mb-2">
@@ -1110,7 +1283,7 @@ export default function StudentsPage() {
                                                         All <span className="font-bold">{count}</span> subject(s) in <span className="font-bold">{dept?.name || dept?.code}</span> batch will be automatically assigned.
                                                     </p>
                                                     <div className="mt-2 flex flex-wrap gap-1">
-                                                        {subjects.filter(s => s.departmentId === formData.departmentId).map(s => (
+                                                        {subjects.filter(s => s.batchId === formData.batchId).map(s => (
                                                             <span key={s.id} className="px-2 py-0.5 text-xs bg-white/70 text-emerald-700 rounded-full border border-emerald-100">
                                                                 {s.name}
                                                             </span>
@@ -1291,7 +1464,7 @@ export default function StudentsPage() {
                                     {importResults.updated > 0 && (
                                         <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-sm text-blue-700 flex items-center gap-2">
                                             <Sparkles className="w-4 h-4 shrink-0" />
-                                            {importResults.updated} existing student(s) were updated with new data (name, semester, department, etc.)
+                                            {importResults.updated} existing student(s) were updated with new data (name, semester, batch, etc.)
                                         </div>
                                     )}
 

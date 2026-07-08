@@ -82,12 +82,12 @@ export interface StudentReportData {
     studentEmail: string;
     studentId?: string;
     rollNumber: string | number;
-    department: string;
+    batch: string;
     semester: number;
     totalClasses: number;
     attendedClasses: number;
     percentage: number;
-    hodName: string; // Department HOD's name for the report footer
+    hodName: string; // Batch HOD's name for the report footer
     reportMonth?: string;  // e.g. "April 2026"
     reportPeriod?: string; // e.g. "1 April 2026 – 30 April 2026"
     // Subject-wise breakdown
@@ -160,7 +160,7 @@ function generateEmailHTML(data: StudentReportData): string {
                             </p>
                             
                             <p style="margin: 0 0 14px; color: #374151; font-size: 14px; line-height: 1.8; font-family: Arial, sans-serif;">
-                                This is to inform you that as per the attendance records maintained by the Department of <strong>${data.department}</strong>${data.reportPeriod ? ` for the period <strong>${data.reportPeriod}</strong>` : `, Semester <strong>${data.semester}</strong>`}, your attendance has been recorded at <strong style="color: #dc2626;">${data.percentage}%</strong>, which is below the minimum mandatory attendance requirement of <strong>60%</strong> prescribed by the college.
+                                This is to inform you that as per the attendance records maintained by the Batch of <strong>${data.batch}</strong>${data.reportPeriod ? ` for the period <strong>${data.reportPeriod}</strong>` : `, Semester <strong>${data.semester}</strong>`}, your attendance has been recorded at <strong style="color: #dc2626;">${data.percentage}%</strong>, which is below the minimum mandatory attendance requirement of <strong>60%</strong> prescribed by the college.
                             </p>
 
                             <p style="margin: 0 0 14px; color: #374151; font-size: 14px; line-height: 1.8; font-family: Arial, sans-serif;">
@@ -181,8 +181,8 @@ function generateEmailHTML(data: StudentReportData): string {
                                                 <td style="padding: 5px 0; color: #1e293b; font-size: 13px; font-weight: 600; text-align: right;">${data.rollNumber}</td>
                                             </tr>
                                             <tr>
-                                                <td style="padding: 5px 0; color: #64748b; font-size: 13px;">Department</td>
-                                                <td style="padding: 5px 0; color: #1e293b; font-size: 13px; font-weight: 600; text-align: right;">${data.department}</td>
+                                                <td style="padding: 5px 0; color: #64748b; font-size: 13px;">Batch</td>
+                                                <td style="padding: 5px 0; color: #1e293b; font-size: 13px; font-weight: 600; text-align: right;">${data.batch}</td>
                                             </tr>
                                             <tr>
                                                 <td style="padding: 5px 0; color: #64748b; font-size: 13px;">Semester</td>
@@ -220,7 +220,7 @@ function generateEmailHTML(data: StudentReportData): string {
                                 ${data.hodName}
                             </p>
                             <p style="margin: 0; color: #64748b; font-size: 12px; font-family: Arial, sans-serif;">
-                                Head of Department, ${data.department}
+                                Head of Batch, ${data.batch}
                             </p>
                             <p style="margin: 0; color: #64748b; font-size: 12px; font-family: Arial, sans-serif;">
                                 Yogoda Satsanga Mahavidyalaya, Ranchi
@@ -253,7 +253,7 @@ function generateEmailHTML(data: StudentReportData): string {
                                 This is a computer-generated communication from the Attendance Management System of Yogoda Satsanga Mahavidyalaya.
                             </p>
                             <p style="margin: 4px 0 0; color: #94a3b8; font-size: 10px; font-family: Arial, sans-serif;">
-                                For any discrepancies in the attendance record, please contact your respective department office directly.
+                                For any discrepancies in the attendance record, please contact your respective batch office directly.
                             </p>
                             <p style="margin: 6px 0 0; color: #cbd5e1; font-size: 9px; font-family: Arial, sans-serif;">
                                 Sent to: ${data.studentEmail} &bull; Please do not reply to this email.
@@ -293,12 +293,12 @@ Subject: Monthly Attendance Report${data.reportMonth ? ` — ${data.reportMonth}
 
 Dear ${data.studentName},
 
-This is to inform you that as per the attendance records maintained by the Department of ${data.department}${data.reportPeriod ? ` for the period ${data.reportPeriod}` : `, Semester ${data.semester}`}, your attendance has been recorded at ${data.percentage}%, which is below the minimum mandatory attendance requirement of 60% prescribed by the college.
+This is to inform you that as per the attendance records maintained by the Batch of ${data.batch}${data.reportPeriod ? ` for the period ${data.reportPeriod}` : `, Semester ${data.semester}`}, your attendance has been recorded at ${data.percentage}%, which is below the minimum mandatory attendance requirement of 60% prescribed by the college.
 
 STUDENT DETAILS
 - Name: ${data.studentName}
 - Roll Number: ${data.rollNumber}
-- Department: ${data.department}
+- Batch: ${data.batch}
 - Semester: ${data.semester}
 - Total Classes Held: ${data.totalClasses}
 - Classes Attended: ${data.attendedClasses}
@@ -312,12 +312,12 @@ You are hereby advised to improve your attendance forthwith and to meet the unde
 
 Regards,
 ${data.hodName}
-Head of Department, ${data.department}
+Head of Batch, ${data.batch}
 Yogoda Satsanga Mahavidyalaya, Ranchi
 
 ---
 This is a computer-generated communication from the Attendance Management System.
-For any discrepancies, please contact your respective department office directly.
+For any discrepancies, please contact your respective batch office directly.
 Sent to: ${data.studentEmail}
 `;
 }
@@ -343,7 +343,7 @@ export async function sendReportCardEmail(data: StudentReportData): Promise<{ su
             studentName: data.studentName,
             studentId: data.studentId,
             rollNumber: data.rollNumber,
-            department: data.department,
+            batch: data.batch,
             semester: data.semester,
             totalClasses: data.totalClasses,
             attendedClasses: data.attendedClasses,

@@ -10,8 +10,8 @@ if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) {
 export interface JWTPayload {
     userId: string;
     email: string;
-    role: 'super_admin' | 'teacher';
-    departmentId?: string;
+    role: 'super_admin' | 'teacher' | 'student';
+    batchId?: string;
 }
 
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';

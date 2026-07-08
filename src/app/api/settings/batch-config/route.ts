@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 403 });
         }
 
-        // Get all batch mappings for all department types
+        // Get all batch mappings for all batch types
         const rows = await query<{ key: string, value: any }>(
             `SELECT key, value FROM application_settings WHERE key LIKE 'batch_mapping_%'`
         );

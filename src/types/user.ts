@@ -7,7 +7,7 @@ export interface User {
     firstName: string;
     lastName: string;
     role: UserRole;
-    departmentId: string | null;
+    batchId: string | null;
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -19,7 +19,7 @@ export interface UserResponse {
     firstName: string;
     lastName: string;
     role: UserRole;
-    departmentId: string | null;
+    batchId: string | null;
 }
 
 export interface AuthResponse {

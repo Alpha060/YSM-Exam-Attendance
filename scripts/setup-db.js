@@ -62,7 +62,7 @@ async function setup() {
         // Dynamic Super Admin Creation
         console.log('Creating Super Admin user...');
         const bcrypt = require('bcrypt');
-        const password = 'admin123';
+        const password = 'Admin@123';
         const saltRounds = 10;
         const hash = await bcrypt.hash(password, saltRounds);
 
@@ -74,7 +74,7 @@ async function setup() {
                 is_active = true;
         `;
 
-        await client.query(insertUserQuery, ['admin@ysm.edu', hash, 'Super', 'Admin']);
+        await client.query(insertUserQuery, ['superadmin@ysm.com', hash, 'Super', 'Admin']);
         console.log(`✅ Super Admin created with password: ${password}`);
 
         console.log('Database setup complete!');

@@ -7,9 +7,9 @@ interface SubjectRow {
     code: string;
     name: string;
     paper_code: string | null;
-    department_id: string | null;
-    department_name: string | null;
-    department_code: string | null;
+    batch_id: string | null;
+    batch_name: string | null;
+    batch_code: string | null;
     credits: number;
     created_at: string;
 }
@@ -29,21 +29,21 @@ export async function GET(request: NextRequest) {
         }
 
         const { searchParams } = new URL(request.url);
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
 
         let queryStr = `
-            SELECT s.id, s.code, s.paper_code, s.name, s.department_id, s.credits, s.created_at,
-                   d.name as department_name, d.code as department_code
+            SELECT s.id, s.code, s.paper_code, s.name, s.batch_id, s.credits, s.created_at,
+                   d.name as batch_name, d.code as batch_code
             FROM subjects s
-            LEFT JOIN departments d ON s.department_id = d.id
+            LEFT JOIN batches d ON s.batch_id = d.id
             WHERE 1=1
         `;
         const params: (string | number)[] = [];
 
-        // Filter by batch (department)
-        if (departmentId) {
-            params.push(departmentId);
-            queryStr += ` AND s.department_id = $${params.length}`;
+        // Filter by batch (batch)
+        if (batchId) {
+            params.push(batchId);
+            queryStr += ` AND s.batch_id = $${params.length}`;
         }
 
         // Teacher: only show assigned subjects
@@ -73,9 +73,9 @@ export async function GET(request: NextRequest) {
                 code: s.code,
                 paperCode: s.paper_code || '',
                 name: s.name,
-                departmentId: s.department_id,
-                departmentName: s.department_name,
-                departmentCode: s.department_code,
+                batchId: s.batch_id,
+                batchName: s.batch_name,
+                batchCode: s.batch_code,
                 credits: s.credits,
                 createdAt: s.created_at
             }))
@@ -108,10 +108,10 @@ export async function POST(request: NextRequest) {
         const code = body.code?.trim();
         const paperCode = body.paperCode?.trim() || null;
         const name = body.name?.trim();
-        const departmentId = body.departmentId;
+        const batchId = body.batchId;
         const credits = body.credits || 3;
 
-        if (!code || !name || !departmentId) {
+        if (!code || !name || !batchId) {
             return NextResponse.json(
                 { error: 'Code, name, and batch are required' },
                 { status: 400 }
@@ -127,8 +127,8 @@ export async function POST(request: NextRequest) {
 
         // Check if batch is completed
         const batchCheck = await query<{ status: string }>(
-            'SELECT COALESCE(status, \'active\') as status FROM departments WHERE id = $1',
-            [departmentId]
+            'SELECT COALESCE(status, \'active\') as status FROM batches WHERE id = $1',
+            [batchId]
         );
         if (batchCheck.length > 0 && batchCheck[0].status === 'completed') {
             return NextResponse.json(
@@ -139,8 +139,8 @@ export async function POST(request: NextRequest) {
 
         // Check for existing subject in same batch
         const existing = await query<{ id: string }>(
-            'SELECT id FROM subjects WHERE code = $1 AND department_id = $2',
-            [code, departmentId]
+            'SELECT id FROM subjects WHERE code = $1 AND batch_id = $2',
+            [code, batchId]
         );
 
         let subjectId: string;
@@ -152,10 +152,10 @@ export async function POST(request: NextRequest) {
             );
         } else {
             const result = await query<{ id: string }>(
-                `INSERT INTO subjects (code, paper_code, name, department_id, credits)
+                `INSERT INTO subjects (code, paper_code, name, batch_id, credits)
                  VALUES ($1, $2, $3, $4, $5)
                  RETURNING id`,
-                [code, paperCode, name, departmentId, credits]
+                [code, paperCode, name, batchId, credits]
             );
             subjectId = result[0].id;
         }
@@ -169,9 +169,9 @@ export async function POST(request: NextRequest) {
         await query(
             `INSERT INTO student_subjects (student_id, subject_id, academic_year)
              SELECT s.id, $1, $2 FROM students s
-             WHERE s.department_id = $3 AND s.is_active = true
+             WHERE s.batch_id = $3 AND s.is_active = true
              ON CONFLICT (student_id, subject_id, academic_year) DO NOTHING`,
-            [subjectId, academicYear, departmentId]
+            [subjectId, academicYear, batchId]
         );
 
         return NextResponse.json({
@@ -203,7 +203,7 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { id, code, paperCode, name, credits, departmentId } = await request.json();
+        const { id, code, paperCode, name, credits, batchId } = await request.json();
 
         if (!id) {
             return NextResponse.json({ error: 'Subject ID required' }, { status: 400 });
@@ -212,7 +212,7 @@ export async function PUT(request: NextRequest) {
         // Check if subject belongs to a completed batch
         const batchCheck = await query<{ status: string }>(
             `SELECT COALESCE(d.status, 'active') as status FROM subjects s
-             JOIN departments d ON s.department_id = d.id
+             JOIN batches d ON s.batch_id = d.id
              WHERE s.id = $1`,
             [id]
         );
@@ -231,7 +231,7 @@ export async function PUT(request: NextRequest) {
         if (paperCode !== undefined) { updateFields.push(`paper_code = $${++paramCount}`); params.push(paperCode?.trim() || null); }
         if (name) { updateFields.push(`name = $${++paramCount}`); params.push(name); }
         if (credits) { updateFields.push(`credits = $${++paramCount}`); params.push(parseInt(credits)); }
-        if (departmentId) { updateFields.push(`department_id = $${++paramCount}`); params.push(departmentId); }
+        if (batchId) { updateFields.push(`batch_id = $${++paramCount}`); params.push(batchId); }
 
         if (updateFields.length > 0) {
             await query(

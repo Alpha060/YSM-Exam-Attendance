@@ -19,9 +19,9 @@ interface User {
 
 interface ClassItem {
     id: string;
-    department_id: string;
-    department_name: string;
-    department_code: string;
+    batch_id: string;
+    batch_name: string;
+    batch_code: string;
     semester: number;
     slot_number: number;
     subject_id: string;
@@ -163,9 +163,9 @@ export default function ClassesPage() {
 
             if (delay > 0) {
                 const timer = setTimeout(() => {
-                    const batchLabel = getBatchLabel(cls.semester, cls.department_code);
+                    const batchLabel = getBatchLabel(cls.semester, cls.batch_code);
                     showNotification('📚 Class Starting Soon!', {
-                        body: `Your class is on Semester ${cls.semester} with Batch ${batchLabel}\n${cls.subject_name} — ${cls.department_code}`,
+                        body: `Your class is on Semester ${cls.semester} with Batch ${batchLabel}\n${cls.subject_name} — ${cls.batch_code}`,
                         icon: '/icons/icon-192x192.png',
                         tag: `class-${cls.id}`,
                         requireInteraction: true,
@@ -256,7 +256,7 @@ export default function ClassesPage() {
         );
     }
 
-    if (user && user.role === 'super_admin') {
+    if (user && user.role !== 'teacher') {
         return <AccessDenied />;
     }
 
@@ -349,14 +349,14 @@ export default function ClassesPage() {
                             if (!acc[key]) {
                                 acc[key] = { 
                                     ...cls, 
-                                    department_codes: [cls.department_code], 
+                                    batch_codes: [cls.batch_code], 
                                     semesters: [cls.semester],
                                     subject_names: [cls.subject_name],
                                     paper_codes: [paperCodeVal]
                                 };
                             } else {
-                                if (!acc[key].department_codes.includes(cls.department_code)) {
-                                    acc[key].department_codes.push(cls.department_code);
+                                if (!acc[key].batch_codes.includes(cls.batch_code)) {
+                                    acc[key].batch_codes.push(cls.batch_code);
                                 }
                                 
                                 const isSemExists = acc[key].semesters.some(s => String(s) === String(cls.semester));
@@ -377,7 +377,7 @@ export default function ClassesPage() {
                                 }
                             }
                             return acc;
-                        }, {} as Record<string, ClassItem & { department_codes: string[], semesters: number[], subject_names: string[], paper_codes: string[] }>)).map((cls) => {
+                        }, {} as Record<string, ClassItem & { batch_codes: string[], semesters: number[], subject_names: string[], paper_codes: string[] }>)).map((cls) => {
                             const active = isClassActive(cls.start_time, cls.end_time);
                             const upcoming = isClassUpcoming(cls.start_time);
 
@@ -426,11 +426,11 @@ export default function ClassesPage() {
                                                 {/* Semester & Dept */}
                                                 <div className="flex flex-wrap items-center gap-2 mt-2">
                                                     <span className="inline-flex items-center gap-1 text-xs font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-lg">
-                                                        Sem: {cls.semesters.join('/')} ({getBatchLabel(cls.semesters[0], cls.department_codes[0])})
+                                                        Sem: {cls.semesters.join('/')} ({getBatchLabel(cls.semesters[0], cls.batch_codes[0])})
                                                     </span>
                                                     <span className="inline-flex items-center gap-1 text-xs font-medium bg-gray-100 text-gray-700 px-2.5 py-1 rounded-lg border border-gray-200 shadow-sm">
                                                         <Building2 className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-                                                        <span className="font-bold">{cls.department_codes.join('/')}</span>
+                                                        <span className="font-bold">{cls.batch_codes.join('/')}</span>
                                                     </span>
                                                 </div>
                                             </div>

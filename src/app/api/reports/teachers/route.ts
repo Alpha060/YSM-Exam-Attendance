@@ -7,7 +7,7 @@ interface TeacherData {
     first_name: string;
     last_name: string;
     email: string;
-    department_name: string;
+    batch_name: string;
     subject_names: string;
     total_sessions: string;
     working_days: string;
@@ -28,10 +28,10 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        const { role, departmentId: userDeptId, userId } = payload;
+        const { role, batchId: userDeptId, userId } = payload;
 
         const { searchParams } = new URL(request.url);
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
 
         // Teachers are ALWAYS restricted to active batches — override any param sent
         const batchStatus = role === 'teacher' ? 'active' : (searchParams.get('batchStatus') || 'all');
@@ -45,25 +45,25 @@ export async function GET(request: NextRequest) {
             filters.push(`EXISTS (
                 SELECT 1 FROM teacher_subjects ts_filt 
                 JOIN subjects s_filt ON ts_filt.subject_id = s_filt.id 
-                JOIN departments d_filt ON s_filt.department_id = d_filt.id 
+                JOIN batches d_filt ON s_filt.batch_id = d_filt.id 
                 WHERE ts_filt.teacher_id = u.id AND (d_filt.status IS NULL OR d_filt.status = 'active' OR d_filt.status = 'upcoming')
             )`);
         } else if (batchStatus === 'completed') {
             filters.push(`EXISTS (
                 SELECT 1 FROM teacher_subjects ts_filt 
                 JOIN subjects s_filt ON ts_filt.subject_id = s_filt.id 
-                JOIN departments d_filt ON s_filt.department_id = d_filt.id 
+                JOIN batches d_filt ON s_filt.batch_id = d_filt.id 
                 WHERE ts_filt.teacher_id = u.id AND d_filt.status = 'completed'
             )`);
         }
 
         if (role === 'super_admin') {
-            // Super admin: see all teachers, optionally filter by department
-            if (departmentId) {
-                params.push(departmentId);
-                filters.push(`(u.department_id = $${params.length} OR u.id IN (SELECT user_id FROM user_departments WHERE department_id = $${params.length}))`);
+            // Super admin: see all teachers, optionally filter by batch
+            if (batchId) {
+                params.push(batchId);
+                filters.push(`(u.batch_id = $${params.length} OR u.id IN (SELECT user_id FROM user_batches WHERE batch_id = $${params.length}))`);
             }
-            // No departmentId: super_admin sees ALL teachers
+            // No batchId: super_admin sees ALL teachers
         } else if (role === 'teacher') {
             // Teacher: only see their own stats
             params.push(userId);
@@ -83,11 +83,11 @@ export async function GET(request: NextRequest) {
                     SELECT STRING_AGG(dept_code, ', ' ORDER BY dept_code)
                     FROM (
                         SELECT DISTINCT ud_d.code AS dept_code
-                        FROM departments ud_d
-                        WHERE ud_d.id = u.department_id
-                           OR ud_d.id IN (SELECT department_id FROM user_departments ud WHERE ud.user_id = u.id)
+                        FROM batches ud_d
+                        WHERE ud_d.id = u.batch_id
+                           OR ud_d.id IN (SELECT batch_id FROM user_batches ud WHERE ud.user_id = u.id)
                     ) dept_codes
-                ) as department_name,
+                ) as batch_name,
                 COALESCE(
                     (
                         SELECT STRING_AGG(sn, ', ' ORDER BY sn)
@@ -95,7 +95,7 @@ export async function GET(request: NextRequest) {
                             SELECT DISTINCT s2.name AS sn
                             FROM teacher_subjects ts2
                             JOIN subjects s2 ON s2.id = ts2.subject_id
-                            JOIN departments d2 ON d2.id = s2.department_id
+                            JOIN batches d2 ON d2.id = s2.batch_id
                             WHERE ts2.teacher_id = u.id
                             ${role === 'teacher' ? "AND COALESCE(d2.status, 'active') = 'active'" : ''}
                         ) sub_names
@@ -126,7 +126,7 @@ export async function GET(request: NextRequest) {
              FROM users u
              LEFT JOIN teacher_subjects ts ON ts.teacher_id = u.id
              LEFT JOIN subjects s ON s.id = ts.subject_id
-             LEFT JOIN departments sd ON sd.id = s.department_id
+             LEFT JOIN batches sd ON sd.id = s.batch_id
              LEFT JOIN attendance_records ar ON ar.subject_id = ts.subject_id AND ar.teacher_id = u.id
              WHERE u.role IN ('teacher') ${filterClause}
              GROUP BY u.id, u.first_name, u.last_name, u.email
@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
             id: t.teacher_id,
             name: `${t.first_name} ${t.last_name}`,
             email: t.email,
-            department: t.department_name || 'N/A',
+            batch: t.batch_name || 'N/A',
             subjects: t.subject_names || '-',
             totalSessions: parseInt(t.total_sessions) || 0,
             workingDays: parseInt(t.working_days) || 0,

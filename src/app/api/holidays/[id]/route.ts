@@ -20,9 +20,9 @@ export async function DELETE(
         }
 
         if (payload.role === 'super_admin') {
-            const check = await query<any>('SELECT department_id FROM holidays WHERE id = $1', [id]);
-            if (check.length === 0 || check[0].department_id !== payload.departmentId) {
-                return NextResponse.json({ error: 'Cannot delete global or other department holidays' }, { status: 403 });
+            const check = await query<any>('SELECT batch_id FROM holidays WHERE id = $1', [id]);
+            if (check.length === 0 || check[0].batch_id !== payload.batchId) {
+                return NextResponse.json({ error: 'Cannot delete global or other batch holidays' }, { status: 403 });
             }
         }
 

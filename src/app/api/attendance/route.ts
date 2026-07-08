@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
         const assignmentCheck = await query(
             `SELECT 1 FROM teacher_subjects ts
              JOIN subjects s ON ts.subject_id = s.id
-             JOIN departments d ON s.department_id = d.id
+             JOIN batches d ON s.batch_id = d.id
              WHERE ts.teacher_id = $1 AND ts.subject_id = $2
              AND ts.unassigned_date IS NULL
              AND COALESCE(d.status, 'active') = 'active'`,

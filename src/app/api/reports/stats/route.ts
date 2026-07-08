@@ -16,9 +16,9 @@ interface StudentAttendanceStatus {
     attendance_pct: string;
 }
 
-interface DepartmentStats {
-    department_id: string;
-    department_name: string;
+interface BatchStats {
+    batch_id: string;
+    batch_name: string;
     total_students: string;
     avg_attendance: string;
 }
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        const { role, departmentId, userId } = payload;
+        const { role, batchId, userId } = payload;
 
         // Allow HOD to view as teacher (for My Reports)
         const { searchParams } = new URL(request.url);
@@ -58,10 +58,10 @@ export async function GET(request: NextRequest) {
                 SELECT ss.student_id FROM student_subjects ss
                 JOIN teacher_subjects ts ON ss.subject_id = ts.subject_id
                 WHERE ts.teacher_id = $1
-            ) AND s.department_id IN (
-                SELECT department_id FROM users WHERE id = $1
+            ) AND s.batch_id IN (
+                SELECT batch_id FROM users WHERE id = $1
                 UNION
-                SELECT department_id FROM user_departments WHERE user_id = $1
+                SELECT batch_id FROM user_batches WHERE user_id = $1
             )`;
             studentParams.push(userId);
 
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
             try {
                 const studentQuery = `SELECT COUNT(*) as count FROM students s
                     WHERE s.is_active = true
-                    AND s.department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active')
+                    AND s.batch_id IN (SELECT id FROM batches WHERE COALESCE(status, 'active') = 'active')
                     ${studentFilter}`;
                 const studentCount = await queryOne<CountResult>(studentQuery, studentParams);
                 totalStudents = parseInt(studentCount?.count || '0');
@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
         promises.push((async () => {
             try {
                 const subjectQuery = `SELECT COUNT(*) as count FROM subjects
-                    WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active')
+                    WHERE batch_id IN (SELECT id FROM batches WHERE COALESCE(status, 'active') = 'active')
                     ${subjectFilter ? 'AND ' + subjectFilter.replace('WHERE', '') : ''}`;
                 const subjectCount = await queryOne<CountResult>(subjectQuery, subjectParams);
                 totalSubjects = parseInt(subjectCount?.count || '0');
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
                     COUNT(DISTINCT ar.teacher_id || '-' || ar.date::text || '-' || ar.subject_id::text || '-' || ar.lecture_number::text) as count,
                     COUNT(DISTINCT ar.date) as working_days
                     FROM attendance_records ar
-                    WHERE ar.subject_id IN (SELECT id FROM subjects WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active'))
+                    WHERE ar.subject_id IN (SELECT id FROM subjects WHERE batch_id IN (SELECT id FROM batches WHERE COALESCE(status, 'active') = 'active'))
                     ${attendanceFilter}`;
                 const lectureCount = await queryOne<CountResult & { working_days: string }>(lectureQuery, attendanceParams);
                 totalLectures = parseInt(lectureCount?.count || '0');
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
                     COUNT(DISTINCT ar.teacher_id || '-' || ar.subject_id::text || '-' || ar.lecture_number::text) as count
                     FROM attendance_records ar
                     WHERE ar.date = $${todayDateIdx}
-                    AND ar.subject_id IN (SELECT id FROM subjects WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active'))
+                    AND ar.subject_id IN (SELECT id FROM subjects WHERE batch_id IN (SELECT id FROM batches WHERE COALESCE(status, 'active') = 'active'))
                     ${attendanceFilter}`;
                 const tCount = await queryOne<CountResult>(tQuery, todayParams);
                 todaySessions = parseInt(tCount?.count || '0');
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
                         COUNT(*) as total,
                         COUNT(CASE WHEN ar.status = 'present' THEN 1 END) as present
                      FROM attendance_records ar
-                     WHERE ar.subject_id IN (SELECT id FROM subjects WHERE department_id IN (SELECT id FROM departments WHERE COALESCE(status, 'active') = 'active'))
+                     WHERE ar.subject_id IN (SELECT id FROM subjects WHERE batch_id IN (SELECT id FROM batches WHERE COALESCE(status, 'active') = 'active'))
                      ${attendanceFilter}`;
                 const stats = await queryOne<AttendanceStats>(statsQuery, attendanceParams);
                 if (stats && parseInt(stats.total) > 0) {
@@ -210,16 +210,16 @@ export async function GET(request: NextRequest) {
             })());
         }
 
-        // For Super Admin: Get department-wise stats
-        let departmentStats: { departmentId: string; departmentName: string; totalStudents: number; avgAttendance: number }[] = [];
+        // For Super Admin: Get batch-wise stats
+        let batchStats: { batchId: string; batchName: string; totalStudents: number; avgAttendance: number }[] = [];
 
         if (effectiveRole === 'super_admin') {
             promises.push((async () => {
                 try {
                     const deptQuery = `
                         SELECT 
-                            d.id as department_id,
-                            d.name as department_name,
+                            d.id as batch_id,
+                            d.name as batch_name,
                             COUNT(DISTINCT s.id) as total_students,
                             COALESCE(
                                 ROUND(
@@ -229,23 +229,23 @@ export async function GET(request: NextRequest) {
                                 ),
                                 0
                             ) as avg_attendance
-                        FROM departments d
-                        LEFT JOIN students s ON s.department_id = d.id
+                        FROM batches d
+                        LEFT JOIN students s ON s.batch_id = d.id
                         LEFT JOIN attendance_records ar ON ar.student_id = s.id
                         WHERE COALESCE(d.status, 'active') = 'active'
                         GROUP BY d.id, d.name
                         ORDER BY d.name
                     `;
 
-                    const deptStats = await query<DepartmentStats>(deptQuery, []);
-                    departmentStats = deptStats.map(d => ({
-                        departmentId: d.department_id,
-                        departmentName: d.department_name,
+                    const deptStats = await query<BatchStats>(deptQuery, []);
+                    batchStats = deptStats.map(d => ({
+                        batchId: d.batch_id,
+                        batchName: d.batch_name,
                         totalStudents: parseInt(d.total_students) || 0,
                         avgAttendance: Math.round(parseFloat(d.avg_attendance) || 0)
                     }));
                 } catch (err) {
-                    console.error('Error getting department stats:', err);
+                    console.error('Error getting batch stats:', err);
                 }
             })());
         }
@@ -266,8 +266,8 @@ export async function GET(request: NextRequest) {
                     lowAttendanceCount,
                     warningAttendanceCount,
                 } : {}),
-                ...(effectiveRole === 'super_admin' && departmentStats.length > 0 ? {
-                    departmentStats,
+                ...(effectiveRole === 'super_admin' && batchStats.length > 0 ? {
+                    batchStats,
                 } : {}),
             }
         });

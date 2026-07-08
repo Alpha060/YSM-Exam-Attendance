@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
-interface DepartmentRow {
+interface BatchRow {
     id: string;
     name: string;
     code: string;
@@ -24,30 +24,30 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        let departments;
+        let batches;
         if (payload.role === 'super_admin') {
-            departments = await query<DepartmentRow>(
-                `SELECT d.id, d.name, d.code, COALESCE(d.status, 'active') as status, d.created_at
-                 FROM departments d
+            batches = await query<BatchRow>(
+                `SELECT d.id, d.name, d.code, COALESCE(d.status, 'active') as status, d.tuition_fee, d.created_at
+                 FROM batches d
                  ORDER BY d.name ASC`
             );
         } else {
             // Teachers only see ACTIVE batches they are assigned to
-            departments = await query<DepartmentRow>(
-                `SELECT d.id, d.name, d.code, COALESCE(d.status, 'active') as status, d.created_at
-                 FROM departments d
+            batches = await query<BatchRow>(
+                `SELECT d.id, d.name, d.code, COALESCE(d.status, 'active') as status, d.tuition_fee, d.created_at
+                 FROM batches d
                  WHERE COALESCE(d.status, 'active') = 'active'
                  AND d.id IN (
-                     SELECT department_id FROM user_departments WHERE user_id = $1
+                     SELECT batch_id FROM user_batches WHERE user_id = $1
                      UNION
-                     SELECT department_id FROM users WHERE id = $1
+                     SELECT batch_id FROM users WHERE id = $1
                  )
                  ORDER BY d.name ASC`,
                  [payload.userId]
             );
         }
 
-        return NextResponse.json({ departments });
+        return NextResponse.json({ batches });
     } catch (error) {
         console.error('Get batches error:', error);
         return NextResponse.json({ error: 'Server error' }, { status: 500 });
@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const name = body.name?.trim();
         const code = body.code?.trim();
+        const tuition_fee = Number(body.tuition_fee) || 0;
 
         if (!name || !code) {
             return NextResponse.json(
@@ -90,14 +91,14 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const departments = await query<DepartmentRow>(
-            `INSERT INTO departments (name, code)
-             VALUES ($1, $2)
+        const batches = await query<BatchRow>(
+            `INSERT INTO batches (name, code, tuition_fee)
+             VALUES ($1, $2, $3)
              RETURNING *`,
-            [name, code.toUpperCase()]
+            [name, code.toUpperCase(), tuition_fee]
         );
 
-        return NextResponse.json({ department: departments[0] }, { status: 201 });
+        return NextResponse.json({ batch: batches[0] }, { status: 201 });
     } catch (error: unknown) {
         console.error('Create batch error:', error);
         if ((error as { code?: string }).code === '23505') {
@@ -128,7 +129,7 @@ export async function PUT(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { id, name, code, status } = await request.json();
+        const { id, name, code, status, tuition_fee } = await request.json();
 
         if (!id) {
             return NextResponse.json({ error: 'Batch ID required' }, { status: 400 });
@@ -146,15 +147,28 @@ export async function PUT(request: NextRequest) {
         if (name) { updateFields.push(`name = $${++paramCount}`); params.push(name); }
         if (code) { updateFields.push(`code = $${++paramCount}`); params.push(code.toUpperCase()); }
         if (status) { updateFields.push(`status = $${++paramCount}`); params.push(status); }
+        if (tuition_fee !== undefined) { updateFields.push(`tuition_fee = $${++paramCount}`); params.push(Number(tuition_fee) || 0); }
 
         if (updateFields.length === 0) {
             return NextResponse.json({ message: 'No fields to update' });
         }
 
         await query(
-            `UPDATE departments SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+            `UPDATE batches SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
             params
         );
+
+        if (tuition_fee !== undefined) {
+            // Update all existing pending tuition invoices for students in this batch
+            await query(
+                `UPDATE payments 
+                 SET amount = $1 
+                 WHERE status = 'pending' 
+                 AND description ILIKE '%Tuition Fee%' 
+                 AND student_id IN (SELECT id FROM students WHERE batch_id = $2)`,
+                [Number(tuition_fee) || 0, id]
+            );
+        }
 
         // When a batch is completed, soft-archive ALL active teacher assignments for subjects in that batch
         if (status === 'completed') {
@@ -163,7 +177,7 @@ export async function PUT(request: NextRequest) {
                  SET unassigned_date = CURRENT_DATE
                  WHERE unassigned_date IS NULL
                  AND subject_id IN (
-                     SELECT id FROM subjects WHERE department_id = $1
+                     SELECT id FROM subjects WHERE batch_id = $1
                  )`,
                 [id]
             );
@@ -209,7 +223,7 @@ export async function DELETE(request: NextRequest) {
 
         // Check for related records
         const studentsCheck = await query<{ count: string }>(
-            'SELECT COUNT(*) as count FROM students WHERE department_id = $1',
+            'SELECT COUNT(*) as count FROM students WHERE batch_id = $1',
             [id]
         );
         if (parseInt(studentsCheck[0].count) > 0) {
@@ -220,7 +234,7 @@ export async function DELETE(request: NextRequest) {
         }
 
         const teachersCheck = await query<{ count: string }>(
-            'SELECT COUNT(*) as count FROM users WHERE department_id = $1 AND role = \'teacher\'',
+            'SELECT COUNT(*) as count FROM users WHERE batch_id = $1 AND role = \'teacher\'',
             [id]
         );
         if (parseInt(teachersCheck[0].count) > 0) {
@@ -230,7 +244,7 @@ export async function DELETE(request: NextRequest) {
             );
         }
 
-        await query('DELETE FROM departments WHERE id = $1', [id]);
+        await query('DELETE FROM batches WHERE id = $1', [id]);
 
         return NextResponse.json({ message: 'Batch deleted successfully' });
     } catch (error) {

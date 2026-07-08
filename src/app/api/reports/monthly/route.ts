@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        const { role, departmentId: userDeptId, userId } = payload;
+        const { role, batchId: userDeptId, userId } = payload;
 
         const { searchParams } = new URL(request.url);
         const getISTMonthStr = () => {
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
             return istTime.toISOString().slice(0, 7);
         };
         const month = searchParams.get('month') || getISTMonthStr();
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
         const [year, monthNum] = month.split('-');
 
         // Allow HOD to view as teacher (for My Reports)
@@ -67,20 +67,20 @@ export async function GET(request: NextRequest) {
             filters.push(`ar.teacher_id = $${params.length + 1}`);
             params.push(userId);
             // Restrict to active batches only
-            filters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN departments d ON s.department_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
-            if (departmentId) {
+            filters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN batches d ON s.batch_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
+            if (batchId) {
                 filters.push(`ar.student_id IN (
-                    SELECT id FROM students WHERE department_id = $${params.length + 1}
+                    SELECT id FROM students WHERE batch_id = $${params.length + 1}
                 )`);
-                params.push(departmentId);
+                params.push(batchId);
             }
-        } else if (effectiveRole === 'super_admin' && departmentId) {
+        } else if (effectiveRole === 'super_admin' && batchId) {
             filters.push(`ar.student_id IN (
-                SELECT id FROM students WHERE department_id = $${params.length + 1}
+                SELECT id FROM students WHERE batch_id = $${params.length + 1}
             )`);
-            params.push(departmentId);
+            params.push(batchId);
         }
-        // super_admin with no departmentId: no filter — sees all data
+        // super_admin with no batchId: no filter — sees all data
 
 
 

@@ -15,8 +15,8 @@ interface LectureSummaryRow {
     subject_code: string;
     subject_name: string;
     subject_paper_code: string | null;
-    lectureNumber: number;
-    department_names: string;
+    lecture_number: number;
+    batch_names: string;
     teacher_names: string;
     total_students: string;
     present: string;
@@ -29,7 +29,7 @@ interface DetailedRecord {
     roll_number: string;
     first_name: string;
     last_name: string;
-    department_code: string;
+    batch_code: string;
     subject_code: string;
     subject_paper_code: string | null;
     subject_name: string;
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
         }
 
-        const { role, departmentId: userDeptId, userId } = payload;
+        const { role, batchId: userDeptId, userId } = payload;
 
         const { searchParams } = new URL(request.url);
         const getISTDateStr = () => {
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
         };
         const date = searchParams.get('date') || getISTDateStr();
         const subjectId = searchParams.get('subjectId');
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
         const detailed = searchParams.get('detailed') === 'true';
 
         // Allow HOD to view as teacher (for My Reports)
@@ -78,22 +78,22 @@ export async function GET(request: NextRequest) {
             filters.push(`ar.teacher_id = $${params.length + 1}`);
             params.push(userId);
             // Restrict to active batches only
-            filters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN departments d ON s.department_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
-            // Also apply department filter if teacher selected one
-            if (departmentId) {
+            filters.push(`ar.subject_id IN (SELECT s.id FROM subjects s JOIN batches d ON s.batch_id = d.id WHERE COALESCE(d.status, 'active') = 'active')`);
+            // Also apply batch filter if teacher selected one
+            if (batchId) {
                 filters.push(`ar.student_id IN (
-                    SELECT id FROM students WHERE department_id = $${params.length + 1}
+                    SELECT id FROM students WHERE batch_id = $${params.length + 1}
                 )`);
-                params.push(departmentId);
+                params.push(batchId);
             }
-        } else if (effectiveRole === 'super_admin' && departmentId) {
-            // Super admin with optional department filter
+        } else if (effectiveRole === 'super_admin' && batchId) {
+            // Super admin with optional batch filter
             filters.push(`ar.student_id IN (
-                SELECT id FROM students WHERE department_id = $${params.length + 1}
+                SELECT id FROM students WHERE batch_id = $${params.length + 1}
             )`);
-            params.push(departmentId);
+            params.push(batchId);
         }
-        // super_admin with no departmentId: no filter — sees all data
+        // super_admin with no batchId: no filter — sees all data
 
 
         if (subjectId) {
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest) {
                 sub.name as subject_name,
                 sub.paper_code as subject_paper_code,
                 ar.lecture_number,
-                STRING_AGG(DISTINCT d.name, ', ' ORDER BY d.name) as department_names,
+                STRING_AGG(DISTINCT d.name, ', ' ORDER BY d.name) as batch_names,
                 STRING_AGG(DISTINCT (t.first_name || ' ' || t.last_name), ', ') as teacher_names,
                 COUNT(*) as total_students,
                 COUNT(CASE WHEN ar.status = 'present' THEN 1 END) as present,
@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
             FROM attendance_records ar
             JOIN students s ON s.id = ar.student_id
             JOIN subjects sub ON sub.id = ar.subject_id
-            LEFT JOIN departments d ON d.id = s.department_id
+            LEFT JOIN batches d ON d.id = s.batch_id
             LEFT JOIN users t ON t.id = ar.teacher_id
             WHERE ar.date = $1
             ${filterClause}
@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
             subjectName: r.subject_name,
             subjectPaperCode: r.subject_paper_code || null,
             lectureNumber: r.lecture_number,
-            departmentNames: r.department_names || '',
+            batchNames: r.batch_names || '',
             teacherName: r.teacher_names || '',
             totalStudents: parseInt(r.total_students) || 0,
             present: parseInt(r.present) || 0,
@@ -180,7 +180,7 @@ export async function GET(request: NextRequest) {
                     s.roll_number,
                     s.first_name,
                     s.last_name,
-                    d.code as department_code,
+                    d.code as batch_code,
                     sub.code as subject_code,
                     sub.paper_code as subject_paper_code,
                     sub.name as subject_name,
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
                 FROM attendance_records ar
                 JOIN students s ON s.id = ar.student_id
                 JOIN subjects sub ON sub.id = ar.subject_id
-                LEFT JOIN departments d ON d.id = s.department_id
+                LEFT JOIN batches d ON d.id = s.batch_id
                 WHERE ar.date = $1
                 ${filterClause}
                 ORDER BY s.roll_number, sub.code, ar.lecture_number
@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
                 studentCustomId: d.student_custom_id || '',
                 rollNumber: d.roll_number,
                 studentName: `${d.first_name} ${d.last_name}`,
-                departmentCode: d.department_code || '',
+                batchCode: d.batch_code || '',
                 subjectCode: d.subject_code,
                 subjectPaperCode: d.subject_paper_code || null,
                 subjectName: d.subject_name,

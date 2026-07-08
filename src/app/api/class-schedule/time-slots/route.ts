@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 
-// GET - Fetch time slots for a department
+// GET - Fetch time slots for a batch
 export async function GET(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -15,10 +15,10 @@ export async function GET(request: NextRequest) {
         }
 
         const { searchParams } = new URL(request.url);
-        const departmentId = searchParams.get('departmentId');
+        const batchId = searchParams.get('batchId');
 
-        if (!departmentId) {
-            return NextResponse.json({ error: 'departmentId required' }, { status: 400 });
+        if (!batchId) {
+            return NextResponse.json({ error: 'batchId required' }, { status: 400 });
         }
 
         const slots = await query<{
@@ -28,9 +28,9 @@ export async function GET(request: NextRequest) {
         }>(
             `SELECT slot_number, start_time::text, end_time::text
              FROM class_time_slots
-             WHERE department_id = $1
+             WHERE batch_id = $1
              ORDER BY slot_number`,
-            [departmentId]
+            [batchId]
         );
 
         return NextResponse.json({ slots });
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     }
 }
 
-// POST - Upsert time slots for a department
+// POST - Upsert time slots for a batch
 export async function POST(request: NextRequest) {
     try {
         const authHeader = request.headers.get('authorization');
@@ -56,22 +56,22 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Access denied' }, { status: 403 });
         }
 
-        const { departmentId, slots } = await request.json();
+        const { batchId, slots } = await request.json();
 
-        if (!departmentId || !slots || !Array.isArray(slots)) {
-            return NextResponse.json({ error: 'departmentId and slots array required' }, { status: 400 });
+        if (!batchId || !slots || !Array.isArray(slots)) {
+            return NextResponse.json({ error: 'batchId and slots array required' }, { status: 400 });
         }
 
-        // HOD must own the department
+        // HOD must own the batch
         if (payload.role === 'super_admin') {
-            const owned = await query<{ department_id: string }>(
-                `SELECT department_id FROM user_departments WHERE user_id = $1 AND department_id = $2
+            const owned = await query<{ batch_id: string }>(
+                `SELECT batch_id FROM user_batches WHERE user_id = $1 AND batch_id = $2
                  UNION
-                 SELECT department_id FROM users WHERE id = $1 AND department_id = $2`,
-                [payload.userId, departmentId]
+                 SELECT batch_id FROM users WHERE id = $1 AND batch_id = $2`,
+                [payload.userId, batchId]
             );
             if (owned.length === 0) {
-                return NextResponse.json({ error: 'Access denied for this department' }, { status: 403 });
+                return NextResponse.json({ error: 'Access denied for this batch' }, { status: 403 });
             }
         }
 
@@ -81,11 +81,11 @@ export async function POST(request: NextRequest) {
             if (slot.slotNumber < 1 || slot.slotNumber > 6) continue;
 
             await query(
-                `INSERT INTO class_time_slots (department_id, slot_number, start_time, end_time, updated_by)
+                `INSERT INTO class_time_slots (batch_id, slot_number, start_time, end_time, updated_by)
                  VALUES ($1, $2, $3, $4, $5)
-                 ON CONFLICT (department_id, slot_number)
+                 ON CONFLICT (batch_id, slot_number)
                  DO UPDATE SET start_time = $3, end_time = $4, updated_by = $5, updated_at = CURRENT_TIMESTAMP`,
-                [departmentId, slot.slotNumber, slot.startTime, slot.endTime, payload.userId]
+                [batchId, slot.slotNumber, slot.startTime, slot.endTime, payload.userId]
             );
         }
 

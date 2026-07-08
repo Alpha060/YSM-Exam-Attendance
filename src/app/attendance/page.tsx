@@ -37,11 +37,12 @@ interface Subject {
     subjectPaperCode?: string | null;
     subjectName: string;
     academicYear: string;
-    departmentId?: string;
-    departmentName?: string;
+    batchId?: string;
+    batchName?: string;
 }
 
-interface Department {
+interface Batch {
+    status?: string;
     id: string;
     name: string;
     code: string;
@@ -52,7 +53,7 @@ interface Holiday {
     name: string;
     date: string;
     description?: string;
-    department_id: string | null;
+    batch_id: string | null;
 }
 
 export default function AttendancePage() {
@@ -60,14 +61,14 @@ export default function AttendancePage() {
     const [user, setUser] = useState<User | null>(null);
     const [students, setStudents] = useState<Student[]>([]);
     const [subjects, setSubjects] = useState<Subject[]>([]);
-    const [departments, setDepartments] = useState<Department[]>([]);
-    const [teacherDepartmentIds, setTeacherDepartmentIds] = useState<string[]>([]); // All teacher's dept IDs for filtering
+    const [batches, setBatches] = useState<Batch[]>([]);
+    const [teacherBatchIds, setTeacherBatchIds] = useState<string[]>([]); // All teacher's dept IDs for filtering
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // Selection States
     const [selectedSubjectId, setSelectedSubjectId] = useState('');
     const [selectedSection, setSelectedSection] = useState(''); // Optional section
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState('');
+    const [selectedBatchId, setSelectedBatchId] = useState('');
 
     const [loading, setLoading] = useState(true);
     // Initialize with local date (IST) to prevent previous day issue in early morning
@@ -133,7 +134,7 @@ export default function AttendancePage() {
             setLoading(false);
             return;
         }
-        fetchTeacherDepartments(token);
+        fetchTeacherBatches(token);
         fetchTeacherSubjects(token, parsedUser.id);
         fetchHolidays(token);
         setLoading(false);
@@ -162,7 +163,7 @@ export default function AttendancePage() {
     // ========================
     const CACHE_KEYS = {
         ENROLLMENTS: 'offline_all_enrollments',
-        DEPARTMENTS: 'offline_departments',
+        BATCHES: 'offline_batches',
         SUBJECTS: 'offline_subjects',
         HOLIDAYS: 'offline_holidays',
     };
@@ -184,21 +185,21 @@ export default function AttendancePage() {
 
     // (prefetchAllStudentData removed — session cache + batch fetch replaces it)
 
-    const applyDepartments = (allDepts: Department[]) => {
-        setDepartments(allDepts);
-        setTeacherDepartmentIds(allDepts.map(d => d.id));
+    const applyBatches = (allDepts: Batch[]) => {
+        setBatches(allDepts);
+        setTeacherBatchIds(allDepts.map(d => d.id));
     };
 
-    const fetchTeacherDepartments = async (token: string) => {
+    const fetchTeacherBatches = async (token: string) => {
         // --- INSTANT LOAD: Check cache first (stale-while-revalidate) ---
-        const cached = getFromCache<Department[]>(CACHE_KEYS.DEPARTMENTS);
+        const cached = getFromCache<Batch[]>(CACHE_KEYS.BATCHES);
         if (cached && cached.length > 0) {
-            applyDepartments(cached);
+            applyBatches(cached);
         }
 
         try {
-            // Lightweight endpoint — returns only this user's departments
-            const res = await fetch(`/api/me/departments`, {
+            // Lightweight endpoint — returns only this user's batches
+            const res = await fetch(`/api/me/batches`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (res.status === 401) {
@@ -206,21 +207,21 @@ export default function AttendancePage() {
                 return;
             }
             const data = await res.json();
-            const allDepts: Department[] = (data.departments || []).map((d: any) => ({
+            const allDepts: Batch[] = (data.batches || []).map((d: any) => ({
                 id: d.id,
                 name: d.name,
                 code: d.code || '',
             }));
 
             // Update with fresh data
-            applyDepartments(allDepts);
-            cacheToStorage(CACHE_KEYS.DEPARTMENTS, allDepts);
+            applyBatches(allDepts);
+            cacheToStorage(CACHE_KEYS.BATCHES, allDepts);
         } catch (err) {
-            console.error('Error fetching departments:', err);
+            console.error('Error fetching batches:', err);
             // Offline fallback: already loaded from cache above, but we can retry if needed
             if (!cached) {
-                const fallback = getFromCache<Department[]>(CACHE_KEYS.DEPARTMENTS);
-                if (fallback) applyDepartments(fallback);
+                const fallback = getFromCache<Batch[]>(CACHE_KEYS.BATCHES);
+                if (fallback) applyBatches(fallback);
             }
         }
     };
@@ -304,14 +305,14 @@ export default function AttendancePage() {
         // The selected date is already in YYYY-MM-DD format from the input
         const selectedDateNormalized = selectedDate;
 
-        // Determine currently active department block
-        const activeDeptId = selectedDepartmentId || subjects.find(s => s.subjectId === selectedSubjectId)?.departmentId || teacherDepartmentIds[0];
+        // Determine currently active batch block
+        const activeDeptId = selectedBatchId || subjects.find(s => s.subjectId === selectedSubjectId)?.batchId || teacherBatchIds[0];
 
         // Find matching holiday
         const holiday = holidays.find(h => {
             const holidayDateNormalized = normalizeDate(h.date);
             const isDateMatch = holidayDateNormalized === selectedDateNormalized;
-            const isDeptMatch = !h.department_id || h.department_id === activeDeptId;
+            const isDeptMatch = !h.batch_id || h.batch_id === activeDeptId;
             return isDateMatch && isDeptMatch;
         });
 
@@ -329,14 +330,14 @@ export default function AttendancePage() {
             setIsHoliday(false);
             setHolidayName('');
         }
-    }, [selectedDate, holidays, selectedDepartmentId, selectedSubjectId, subjects, teacherDepartmentIds]);
+    }, [selectedDate, holidays, selectedBatchId, selectedSubjectId, subjects, teacherBatchIds]);
 
-    // Filter subjects by selected batch (department)
-    const filteredSubjects = selectedDepartmentId
-        ? subjects.filter(s => s.departmentId === selectedDepartmentId)
+    // Filter subjects by selected batch (batch)
+    const filteredSubjects = selectedBatchId
+        ? subjects.filter(s => s.batchId === selectedBatchId)
         : subjects;
 
-    // Auto-select first subject when department changes or subjects reload
+    // Auto-select first subject when batch changes or subjects reload
     useEffect(() => {
         if (filteredSubjects.length > 0 && !filteredSubjects.find(s => s.subjectId === selectedSubjectId)) {
             setSelectedSubjectId(filteredSubjects[0].subjectId);
@@ -344,7 +345,7 @@ export default function AttendancePage() {
             setSelectedSubjectId('');
             setStudents([]);
         }
-    }, [selectedDepartmentId, filteredSubjects.length]);
+    }, [selectedBatchId, filteredSubjects.length]);
 
     // Fetch students when subject is selected
     useEffect(() => {
@@ -365,19 +366,19 @@ export default function AttendancePage() {
             const enrollmentSubjectId = e._fromSubjectId || e.subjectId;
             if (enrollmentSubjectId !== targetSubjectId) return;
 
-            const studentDeptId = e.studentDepartmentId;
+            const studentDeptId = e.studentBatchId;
 
-            // Filter by department
-            let matchesDepartment = false;
-            if (selectedDepartmentId) {
-                matchesDepartment = studentDeptId === selectedDepartmentId;
-            } else if (teacherDepartmentIds.length > 0) {
-                matchesDepartment = teacherDepartmentIds.includes(studentDeptId);
+            // Filter by batch
+            let matchesBatch = false;
+            if (selectedBatchId) {
+                matchesBatch = studentDeptId === selectedBatchId;
+            } else if (teacherBatchIds.length > 0) {
+                matchesBatch = teacherBatchIds.includes(studentDeptId);
             } else {
-                matchesDepartment = true;
+                matchesBatch = true;
             }
 
-            if (matchesDepartment && !allStudentsMap.has(e.studentId)) {
+            if (matchesBatch && !allStudentsMap.has(e.studentId)) {
                 allStudentsMap.set(e.studentId, {
                     id: e.studentId,
                     student_custom_id: e.studentCustomId,
@@ -451,16 +452,16 @@ export default function AttendancePage() {
             const allStudentsMap = new Map<string, Student>();
 
             (data.enrollments || []).forEach((e: any) => {
-                const studentDeptId = e.studentDepartmentId;
-                let matchesDepartment = false;
-                if (selectedDepartmentId) {
-                    matchesDepartment = studentDeptId === selectedDepartmentId;
-                } else if (teacherDepartmentIds.length > 0) {
-                    matchesDepartment = teacherDepartmentIds.includes(studentDeptId);
+                const studentDeptId = e.studentBatchId;
+                let matchesBatch = false;
+                if (selectedBatchId) {
+                    matchesBatch = studentDeptId === selectedBatchId;
+                } else if (teacherBatchIds.length > 0) {
+                    matchesBatch = teacherBatchIds.includes(studentDeptId);
                 } else {
-                    matchesDepartment = true;
+                    matchesBatch = true;
                 }
-                if (matchesDepartment && !allStudentsMap.has(e.studentId)) {
+                if (matchesBatch && !allStudentsMap.has(e.studentId)) {
                     allStudentsMap.set(e.studentId, {
                         id: e.studentId,
                         student_custom_id: e.studentCustomId,
@@ -881,7 +882,7 @@ export default function AttendancePage() {
         return students;
     }, [students]);
 
-    if (user?.role === 'super_admin') {
+    if (user?.role !== 'teacher') {
         return <AccessDenied />;
     }
 
@@ -983,18 +984,18 @@ export default function AttendancePage() {
                         <div className="p-4">
                             <div className="flex gap-2">
                                 {/* Batch filter if multiple */}
-                                {departments.length > 1 && (
+                                {batches.length > 1 && (
                                     <select
                                         className="flex-1 px-3 py-2.5 bg-white border rounded-xl text-sm font-medium"
-                                        value={selectedDepartmentId}
+                                        value={selectedBatchId}
                                         onChange={(e) => {
-                                            setSelectedDepartmentId(e.target.value);
+                                            setSelectedBatchId(e.target.value);
                                             setSelectedSubjectId('');
                                             e.target.blur();
                                         }}
                                     >
                                         <option value="">All Batches</option>
-                                        {departments.map(dept => (
+                                        {batches.map(dept => (
                                             <option key={dept.id} value={dept.id}>
                                                 {dept.code}
                                             </option>
@@ -1004,7 +1005,7 @@ export default function AttendancePage() {
 
                                 {/* Subject dropdown */}
                                 <select
-                                    className={`${departments.length > 1 ? 'flex-1' : 'w-full'} px-3 py-2.5 bg-white border rounded-xl text-sm font-medium`}
+                                    className={`${batches.length > 1 ? 'flex-1' : 'w-full'} px-3 py-2.5 bg-white border rounded-xl text-sm font-medium`}
                                     value={selectedSubjectId}
                                     onChange={(e) => {
                                         setSelectedSubjectId(e.target.value);
@@ -1195,21 +1196,21 @@ export default function AttendancePage() {
                         <div className="bg-white rounded-lg shadow px-3 py-3 mb-4">
                             <div className="flex flex-col sm:flex-row flex-wrap items-end gap-3">
                                 {/* Batch Filter */}
-                                {departments.length > 1 && (
+                                {batches.length > 1 && (
                                     <div className="w-full sm:flex-1 sm:min-w-[150px]">
-                                        <label htmlFor="department-select" className="block text-xs text-gray-500 mb-1">Batch</label>
+                                        <label htmlFor="batch-select" className="block text-xs text-gray-500 mb-1">Batch</label>
                                         <select
-                                            id="department-select"
+                                            id="batch-select"
                                             className="w-full p-2 border rounded bg-white text-sm"
-                                            value={selectedDepartmentId}
+                                            value={selectedBatchId}
                                             onChange={(e) => {
-                                                setSelectedDepartmentId(e.target.value);
+                                                setSelectedBatchId(e.target.value);
                                                 setSelectedSubjectId('');
                                                 e.target.blur();
                                             }}
                                         >
                                             <option value="">All Batches</option>
-                                            {departments.map(dept => (
+                                            {batches.map(dept => (
                                                 <option key={dept.id} value={dept.id}>
                                                     {dept.name} ({dept.code})
                                                 </option>
