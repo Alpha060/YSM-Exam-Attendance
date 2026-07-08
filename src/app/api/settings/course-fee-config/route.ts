@@ -8,6 +8,7 @@ interface CourseFeeConfigRow {
         durationMonths?: number;
         academyName?: string;
         academySubName?: string;
+        paymentFrequency?: 'monthly' | 'one-time';
     };
 }
 
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
                 durationMonths: row.value.durationMonths ?? 6,
                 academyName: row.value.academyName ?? 'YSM Academy',
                 academySubName: row.value.academySubName ?? 'Competition Wing',
+                paymentFrequency: row.value.paymentFrequency ?? 'monthly',
             });
         }
 
@@ -43,6 +45,7 @@ export async function GET(request: NextRequest) {
             durationMonths: 6,
             academyName: 'YSM Academy',
             academySubName: 'Competition Wing',
+            paymentFrequency: 'monthly',
         });
     } catch (error) {
         console.error('Course fee config fetch error:', error);
@@ -65,13 +68,14 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { registrationFee, durationMonths, academyName, academySubName } = body;
+        const { registrationFee, durationMonths, academyName, academySubName, paymentFrequency } = body;
 
         const configValue = {
             registrationFee: Number(registrationFee) || 0,
             durationMonths: Number(durationMonths) || 0,
             academyName: String(academyName || 'YSM Academy').trim(),
             academySubName: String(academySubName || 'Competition Wing').trim(),
+            paymentFrequency: paymentFrequency === 'one-time' ? 'one-time' : 'monthly',
         };
 
         await query(

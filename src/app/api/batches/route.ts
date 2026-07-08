@@ -158,6 +158,16 @@ export async function PUT(request: NextRequest) {
             params
         );
 
+        // If the batch code was updated, update all student IDs in this batch to reflect the new code
+        if (code) {
+            await query(
+                `UPDATE students 
+                 SET coaching_id = $1 || '-' || batch_year || '-' || roll_number
+                 WHERE batch_id = $2`,
+                [code.toUpperCase(), id]
+            );
+        }
+
         if (tuition_fee !== undefined) {
             // Update all existing pending tuition invoices for students in this batch
             await query(

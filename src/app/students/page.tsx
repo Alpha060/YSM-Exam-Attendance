@@ -1046,7 +1046,7 @@ export default function StudentsPage() {
                                                 id="firstName"
                                                 value={formData.firstName}
                                                 onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                                                placeholder="John"
+                                                placeholder="Rahul"
                                                 className="rounded-xl border-gray-200"
                                                 required
                                             />
@@ -1057,7 +1057,7 @@ export default function StudentsPage() {
                                                 id="lastName"
                                                 value={formData.lastName}
                                                 onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                                                placeholder="Doe"
+                                                placeholder="Kumar"
                                                 className="rounded-xl border-gray-200"
                                             />
                                         </div>
@@ -1068,7 +1068,7 @@ export default function StudentsPage() {
                                                 type="email"
                                                 value={formData.email}
                                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                                placeholder="john.doe@example.com"
+                                                placeholder="rahul.kumar@example.com"
                                                 className="rounded-xl border-gray-200"
                                             />
                                         </div>
@@ -1222,7 +1222,7 @@ export default function StudentsPage() {
                                                 id="guardianName"
                                                 value={formData.guardianName}
                                                 onChange={(e) => setFormData({ ...formData, guardianName: e.target.value })}
-                                                placeholder="Mr. Richard Doe"
+                                                placeholder="Mr. Sanjay Kumar"
                                                 className="rounded-xl border-gray-200"
                                             />
                                         </div>

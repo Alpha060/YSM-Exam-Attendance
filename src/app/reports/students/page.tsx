@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 import { Search, X, BookOpen, CheckCircle, TrendingUp, GraduationCap, ChevronRight, FileText, FileSpreadsheet, FileDown, Calendar, Filter, ChevronDown, User, AlertCircle, Eye, CalendarDays, ArrowUpRight, ArrowDownRight, ChevronLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -933,6 +934,7 @@ function StudentReportContent() {
     <title>Student Attendance Report</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600;700&display=swap');
+
         body { font-family: 'Inter', Arial, sans-serif; padding: 15px; }
         .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-bottom: 15px; }
         .logo-section { display: flex; align-items: center; gap: 15px; }
@@ -1686,7 +1688,7 @@ function StudentReportContent() {
 
 export default function StudentReportPage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full"></div></div>}>
+        <Suspense fallback={<PageSkeleton />}>
             <StudentReportContent />
         </Suspense>
     );

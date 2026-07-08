@@ -189,7 +189,7 @@ const HolidaysMobileSkeleton = () => (
 );
 
 // Page type configurations
-type PageType = 'subjects' | 'teachers' | 'students' | 'batches' | 'holidays' | 'reports' | 'classes';
+type PageType = 'subjects' | 'teachers' | 'students' | 'batches' | 'holidays' | 'reports' | 'classes' | 'dashboard' | 'settings' | 'payments' | 'fees' | 'page';
 
 const pageConfigs: Record<PageType, {
     iconColor: string;
@@ -204,13 +204,18 @@ const pageConfigs: Record<PageType, {
     holidays: { iconColor: 'bg-cyan-100', tableColumns: 5, filterCount: 0, showSubHeader: true },
     reports: { iconColor: 'bg-gray-200', tableColumns: 0, filterCount: 0 },
     classes: { iconColor: 'bg-blue-100', tableColumns: 0, filterCount: 0 },
+    dashboard: { iconColor: 'bg-blue-100', tableColumns: 0, filterCount: 0 },
+    settings: { iconColor: 'bg-gray-100', tableColumns: 0, filterCount: 0 },
+    payments: { iconColor: 'bg-green-100', tableColumns: 0, filterCount: 0 },
+    fees: { iconColor: 'bg-green-100', tableColumns: 0, filterCount: 0 },
+    page: { iconColor: 'bg-gray-100', tableColumns: 0, filterCount: 0 },
 };
 
 interface PageSkeletonProps {
-    type: PageType;
+    type?: PageType;
 }
 
-export function PageSkeleton({ type }: PageSkeletonProps) {
+export function PageSkeleton({ type = 'classes' }: PageSkeletonProps) {
     const config = pageConfigs[type];
 
     return (

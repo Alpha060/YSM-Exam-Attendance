@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Shield, Mail, Eye, EyeOff, Loader2, Save, CheckCircle, AlertTriangle, ToggleLeft, ToggleRight, Settings, Coins, CreditCard } from 'lucide-react';
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 function AccessDenied() {
     return (
@@ -65,6 +65,7 @@ export default function SettingsPage() {
     const [academySubName, setAcademySubName] = useState('Competition Wing');
     const [registrationFee, setRegistrationFee] = useState(500);
     const [durationMonths, setDurationMonths] = useState(6);
+    const [paymentFrequency, setPaymentFrequency] = useState<'monthly' | 'one-time'>('monthly');
     const [loadingCourseFee, setLoadingCourseFee] = useState(false);
     const [savingCourseFee, setSavingCourseFee] = useState(false);
     const [courseFeeMessage, setCourseFeeMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
@@ -159,6 +160,7 @@ export default function SettingsPage() {
                     setAcademySubName(data.academySubName ?? 'Competition Wing');
                     setRegistrationFee(data.registrationFee ?? 500);
                     setDurationMonths(data.durationMonths ?? 6);
+                    setPaymentFrequency(data.paymentFrequency ?? 'monthly');
                 }
             } catch (err) {
                 console.error('Failed to load Course fee config', err);
@@ -185,8 +187,9 @@ export default function SettingsPage() {
                 body: JSON.stringify({
                     academyName,
                     academySubName,
-                    registrationFee: Number(registrationFee) || 0,
-                    durationMonths: Number(durationMonths) || 0
+                    registrationFee,
+                    durationMonths,
+                    paymentFrequency
                 })
             });
 
@@ -285,11 +288,7 @@ export default function SettingsPage() {
     };
 
     if (loading || !user) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
-                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
+        return <PageSkeleton />;
     }
 
     if (user.role !== 'super_admin') {
@@ -591,6 +590,13 @@ export default function SettingsPage() {
                                             <div>
                                                 <label className="block text-sm font-semibold text-gray-700 mb-2">Course Duration (Months)</label>
                                                 <input type="number" value={durationMonths} onChange={(e) => setDurationMonths(Number(e.target.value))} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors font-medium text-gray-900" />
+                                            </div>
+                                            <div className="md:col-span-2">
+                                                <label className="block text-sm font-semibold text-gray-700 mb-2">Payment Frequency</label>
+                                                <select value={paymentFrequency} onChange={(e) => setPaymentFrequency(e.target.value as 'monthly' | 'one-time')} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-colors font-medium text-gray-900">
+                                                    <option value="monthly">Monthly</option>
+                                                    <option value="one-time">One Time Payment</option>
+                                                </select>
                                             </div>
                                         </div>
 

@@ -11,6 +11,7 @@ import {
     XCircle, RefreshCw, Trash2, Edit3, IndianRupee, TrendingUp, AlertTriangle,
     ChevronLeft, ChevronRight, Download, X, Users, Building2
 } from 'lucide-react';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 interface User { id: string; email: string; firstName: string; lastName: string; role: string; }
 interface Batch { id: string; name: string; code: string; }
@@ -65,6 +66,8 @@ export default function AdminPaymentsPage() {
     // Edit amount
     const [editAmount, setEditAmount] = useState('');
 
+    const [paymentFrequency, setPaymentFrequency] = useState<'monthly' | 'one-time'>('monthly');
+
     useEffect(() => {
         const token = localStorage.getItem('token');
         const userData = localStorage.getItem('user');
@@ -112,6 +115,21 @@ export default function AdminPaymentsPage() {
 
     useEffect(() => { if (user?.role === 'super_admin') { fetchBatches(); } }, [user, fetchBatches]);
     useEffect(() => { if (user?.role === 'super_admin') { fetchPayments(); } }, [user, fetchPayments]);
+
+    useEffect(() => {
+        const fetchConfig = async () => {
+            try {
+                const res = await fetch('/api/public/course-fee-config');
+                if (res.ok) {
+                    const data = await res.json();
+                    setPaymentFrequency(data.paymentFrequency || 'monthly');
+                }
+            } catch (err) {
+                console.error('Failed to fetch config', err);
+            }
+        };
+        fetchConfig();
+    }, []);
 
     const handleLogout = () => { localStorage.removeItem('token'); localStorage.removeItem('user'); router.replace('/login'); };
 
@@ -204,7 +222,7 @@ export default function AdminPaymentsPage() {
         return <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${s.bg} ${s.text}`}>{s.label}</span>;
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="w-8 h-8 border-4 border-slate-900 border-t-transparent rounded-full animate-spin"></div></div>;
+    if (loading) return <PageSkeleton />;
     if (!user) return null;
     if (user.role !== 'super_admin') return <AccessDenied message="Only administrators can manage payments." />;
 
@@ -423,7 +441,7 @@ export default function AdminPaymentsPage() {
                         )}
                         <div>
                             <label className="text-xs font-bold text-gray-600 block mb-1">Description</label>
-                            <input type="text" placeholder="e.g. July Monthly Fee" value={assignDesc} onChange={e => setAssignDesc(e.target.value)}
+                            <input type="text" placeholder={paymentFrequency === 'one-time' ? "e.g. Course Tuition Fee" : "e.g. July Monthly Fee"} value={assignDesc} onChange={e => setAssignDesc(e.target.value)}
                                 className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
                         </div>
                         <div>

@@ -7,6 +7,7 @@ import { CalendarDays, TrendingUp, TrendingDown, BarChart3, Filter, ChevronDown,
 import { Navbar } from '@/components/ui/Navbar';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
 import { AccessDenied } from '@/components/ui/access-denied';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 
 interface User {
@@ -424,7 +425,7 @@ function MonthlyReportContent() {
 
 export default function MonthlyReportPage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full"></div></div>}>
+        <Suspense fallback={<PageSkeleton />}>
             <MonthlyReportContent />
         </Suspense>
     );

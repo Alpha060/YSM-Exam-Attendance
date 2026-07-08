@@ -262,7 +262,7 @@ export default function RegisterPage() {
                                         <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <Input
                                             id="firstName"
-                                            placeholder="John"
+                                            placeholder="Rahul"
                                             value={firstName}
                                             onChange={(e) => setFirstName(e.target.value)}
                                             className="pl-11 h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all rounded-xl shadow-sm text-sm"
@@ -276,7 +276,7 @@ export default function RegisterPage() {
                                         <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <Input
                                             id="lastName"
-                                            placeholder="Doe"
+                                            placeholder="Kumar"
                                             value={lastName}
                                             onChange={(e) => setLastName(e.target.value)}
                                             className="pl-11 h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all rounded-xl shadow-sm text-sm"
@@ -472,7 +472,7 @@ export default function RegisterPage() {
                                         <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                         <Input
                                             id="guardianName"
-                                            placeholder="Mr. Richard Doe"
+                                            placeholder="Mr. Sanjay Kumar"
                                             value={guardianName}
                                             onChange={(e) => setGuardianName(e.target.value)}
                                             className="pl-11 h-12 bg-gray-50 border-gray-200 focus:bg-white transition-all rounded-xl shadow-sm text-sm"

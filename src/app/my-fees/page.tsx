@@ -8,6 +8,7 @@ import { AccessDenied } from '@/components/ui/access-denied';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CreditCard, ChevronLeft, CheckCircle2, AlertTriangle, Download, Clock } from 'lucide-react';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 interface User {
     id: string;
@@ -211,11 +212,7 @@ export default function MyFeesPage() {
     };
 
     if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-[#f5f5f7]">
-                <div className="w-8 h-8 border-4 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
+        return <PageSkeleton />;
     }
 
     if (!user) return null;

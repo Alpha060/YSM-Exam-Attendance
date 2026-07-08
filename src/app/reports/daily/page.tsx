@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { Calendar, Users, UserCheck, UserX, ArrowLeft, Filter, Search, ChevronDown, CheckCircle, XCircle, AlertCircle, FileText, FileSpreadsheet, FileDown, ChevronRight, CalendarDays } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Navbar } from '@/components/ui/Navbar';
@@ -359,6 +359,7 @@ function DailyReportContent() {
     <title>Daily Attendance Report - ${formatDateDisplay(selectedDate)}</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600;700&display=swap');
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', Arial, sans-serif; padding: 30px; background: #fff; color: #1f2937; font-size: 12px; }
         .container { max-width: 100%; margin: 0 auto; }
@@ -913,7 +914,7 @@ function DailyReportContent() {
 
 export default function DailyReportPage() {
     return (
-        <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="animate-spin w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full"></div></div>}>
+        <Suspense fallback={<PageSkeleton />}>
             <DailyReportContent />
         </Suspense>
     );

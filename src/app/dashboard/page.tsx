@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { MobileSidebar } from '@/components/ui/MobileSidebar';
 import { Navbar } from '@/components/ui/Navbar';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 import { Button } from '@/components/ui/button';
 import {
     Building2,
@@ -170,11 +171,7 @@ export default function DashboardPage() {
     };
 
     if (loading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50/50">
-                <div className="w-8 h-8 border-4 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
+        return <PageSkeleton />;
     }
 
     if (!user) return null;
@@ -325,11 +322,8 @@ export default function DashboardPage() {
                         <div>
                             <p className="text-sm font-medium text-slate-500 mb-1">Welcome back,</p>
                             <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-slate-900">
-                                {studentProfile?.first_name || user.firstName}
+                                {studentProfile ? `${studentProfile.first_name} ${studentProfile.last_name}` : `${user.firstName} ${user.lastName}`}
                             </h1>
-                        </div>
-                        <div className="h-14 w-14 md:h-16 md:w-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-bold text-xl md:text-2xl shadow-lg shadow-blue-500/30 border-2 border-white shrink-0">
-                            {user.firstName[0]}
                         </div>
                     </div>
 

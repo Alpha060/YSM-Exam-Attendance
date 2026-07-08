@@ -8,6 +8,7 @@ interface CourseFeeConfigRow {
         durationMonths?: number;
         academyName?: string;
         academySubName?: string;
+        paymentFrequency?: 'monthly' | 'one-time';
     };
 }
 
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
                 durationMonths: row.value.durationMonths ?? 6,
                 academyName: row.value.academyName ?? 'YSM Academy',
                 academySubName: row.value.academySubName ?? 'Competition Wing',
+                paymentFrequency: row.value.paymentFrequency ?? 'monthly',
             });
         }
 
@@ -33,6 +35,7 @@ export async function GET(request: NextRequest) {
             durationMonths: 6,
             academyName: 'YSM Academy',
             academySubName: 'Competition Wing',
+            paymentFrequency: 'monthly',
         });
     } catch (error) {
         console.error('Public course fee config fetch error:', error);

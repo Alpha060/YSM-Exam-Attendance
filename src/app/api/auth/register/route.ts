@@ -67,8 +67,7 @@ export async function POST(request: NextRequest) {
             [batchId]
         );
         const prefix = batchResult?.code || 'BATCH';
-        const paddedRoll = rollNumber.toString().padStart(4, '0');
-        const generatedCoachingId = `${prefix}-${batchYear}-${paddedRoll}`;
+        const generatedCoachingId = `${prefix}-${batchYear}-${rollNumber}`;
 
         // 6. Insert User row (role = 'student')
         const userResult = await queryOne<{ id: string }>(

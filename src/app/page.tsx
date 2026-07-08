@@ -7,6 +7,7 @@ import {
     CreditCard, ArrowRight, ShieldCheck, CheckCircle2, ChevronRight, 
     Sparkles, ArrowUpRight, Zap, PlayCircle, Users
 } from 'lucide-react';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
 // Intersection Observer for scroll animations
 function useIntersectionObserver() {
@@ -68,7 +69,8 @@ export default function LandingPage() {
         monthlyFee: 1500,
         durationMonths: 6,
         academyName: 'YSM Academy',
-        academySubName: 'Competition Wing'
+        academySubName: 'Competition Wing',
+        paymentFrequency: 'monthly' as 'monthly' | 'one-time'
     });
 
     useEffect(() => {
@@ -94,7 +96,8 @@ export default function LandingPage() {
                         monthlyFee: data.monthlyFee ?? 1500,
                         durationMonths: data.durationMonths ?? 6,
                         academyName: data.academyName || 'YSM Academy',
-                        academySubName: data.academySubName || 'Competition Wing'
+                        academySubName: data.academySubName || 'Competition Wing',
+                        paymentFrequency: data.paymentFrequency || 'monthly'
                     });
                 }
             } catch (err) {
@@ -118,11 +121,7 @@ export default function LandingPage() {
 
     // Show a minimal spinner while checking auth / redirecting to dashboard
     if (redirecting) {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-[#FAFAFC]">
-                <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-        );
+        return <PageSkeleton />;
     }
 
     return (
@@ -339,8 +338,12 @@ export default function LandingPage() {
                                     
                                     <div className="flex justify-between items-center group">
                                         <div>
-                                            <p className="text-base font-semibold text-slate-200">Monthly Tuition</p>
-                                            <p className="text-xs text-slate-500">Billed monthly</p>
+                                            <p className="text-base font-semibold text-slate-200">
+                                                {academySettings.paymentFrequency === 'one-time' ? 'Course Tuition' : 'Monthly Tuition'}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                                {academySettings.paymentFrequency === 'one-time' ? 'One-time payment' : 'Billed monthly'}
+                                            </p>
                                         </div>
                                         <p className="text-xl font-bold text-white font-mono">₹{academySettings.monthlyFee.toLocaleString('en-IN')}</p>
                                     </div>
