@@ -85,7 +85,13 @@ export async function POST(req: Request) {
                 // 2. Find batch/batch
                 let deptId: string | undefined;
                 let deptStatus: string | undefined;
-                const coachingId = student.coaching_id?.trim()?.toUpperCase() || null;
+                let coachingId = student.coaching_id?.trim()?.toUpperCase() || null;
+                if (coachingId) {
+                    const parsed = parseCoachingId(coachingId);
+                    if (parsed.isValid && parsed.normalizedId) {
+                        coachingId = parsed.normalizedId;
+                    }
+                }
 
                 // Try to find batch from batch_code or batch_code column
                 if (student.batch_code) {

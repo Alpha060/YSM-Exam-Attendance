@@ -337,15 +337,13 @@ export default function AttendancePage() {
         ? subjects.filter(s => s.batchId === selectedBatchId)
         : subjects;
 
-    // Auto-select first subject when batch changes or subjects reload
+    // Do not auto-select subject when batch changes or subjects reload
     useEffect(() => {
-        if (filteredSubjects.length > 0 && !filteredSubjects.find(s => s.subjectId === selectedSubjectId)) {
-            setSelectedSubjectId(filteredSubjects[0].subjectId);
-        } else if (filteredSubjects.length === 0) {
+        if (!filteredSubjects.find(s => s.subjectId === selectedSubjectId)) {
             setSelectedSubjectId('');
             setStudents([]);
         }
-    }, [selectedBatchId, filteredSubjects.length]);
+    }, [selectedBatchId, filteredSubjects]);
 
     // Fetch students when subject is selected
     useEffect(() => {

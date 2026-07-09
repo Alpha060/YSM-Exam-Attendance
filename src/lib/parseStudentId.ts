@@ -11,6 +11,7 @@ export interface ParsedCoachingId {
     year: number | null;          // 2026
     sequence: number | null;      // 1, 2, 3...
     rollNumber: number | null;    // same as sequence
+    normalizedId: string | null;  // 'A1-2026-1' etc.
 }
 
 /**
@@ -27,6 +28,7 @@ export function parseCoachingId(coachingId: string): ParsedCoachingId {
         year: null,
         sequence: null,
         rollNumber: null,
+        normalizedId: null,
     };
 
     if (!coachingId || coachingId.length < 7) {
@@ -52,6 +54,7 @@ export function parseCoachingId(coachingId: string): ParsedCoachingId {
     result.year = parseInt(match[2]);
     result.sequence = parseInt(match[3]);
     result.rollNumber = result.sequence;
+    result.normalizedId = `${result.batchPrefix}-${result.year}-${result.sequence}`;
 
     // Basic year validation
     if (result.year < 2020 || result.year > 2099) {

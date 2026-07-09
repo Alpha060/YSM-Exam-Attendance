@@ -198,7 +198,7 @@ export default function MySettingsPage() {
 
             <Navbar user={user} onMenuClick={() => setSidebarOpen(true)} onLogout={handleLogout} />
 
-            <main className="flex-1 max-w-4xl mx-auto w-full px-5 sm:px-8 py-10 mt-16 space-y-8">
+            <main className="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-8 py-6 sm:py-10 mt-16 space-y-6 sm:space-y-8">
                 {/* Back Link */}
                 <button
                     onClick={() => router.push('/dashboard')}
@@ -209,47 +209,47 @@ export default function MySettingsPage() {
                 </button>
 
                 {/* Header */}
-                <div className="space-y-1.5">
-                    <span className="text-[11px] font-extrabold tracking-widest text-[#86868b] uppercase">
+                <div className="space-y-1">
+                    <span className="text-[10px] font-extrabold tracking-widest text-[#86868b] uppercase">
                         Preferences
                     </span>
-                    <h1 className="text-3xl font-extrabold tracking-tight text-[#1d1d1f] leading-none">
+                    <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-[#1d1d1f] leading-none">
                         Account Settings
                     </h1>
-                    <p className="text-sm font-semibold text-[#86868b]">
+                    <p className="text-xs sm:text-sm font-semibold text-[#86868b]">
                         Manage your personal profile details. Academic records are locked and managed by the college.
                     </p>
                 </div>
 
                 {successMessage && (
-                    <div className="p-4 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-2xl flex items-center gap-3">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <div className="p-3.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl sm:rounded-2xl flex items-center gap-3 text-sm">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
                         <span className="font-semibold">{successMessage}</span>
                     </div>
                 )}
                 {errorMessage && (
-                    <div className="p-4 bg-red-50 text-red-700 border border-red-100 rounded-2xl flex items-center gap-3">
-                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                    <div className="p-3.5 bg-red-50 text-red-700 border border-red-100 rounded-xl sm:rounded-2xl flex items-center gap-3 text-sm">
+                        <AlertTriangle className="w-5 h-5 text-red-600 shrink-0" />
                         <span className="font-semibold">{errorMessage}</span>
                     </div>
                 )}
 
                 {loadingData ? (
-                    <div className="py-20 flex justify-center bg-white rounded-[28px] border border-gray-150 shadow-sm">
+                    <div className="py-20 flex justify-center bg-white rounded-2xl sm:rounded-[28px] border border-gray-150 shadow-sm">
                         <div className="w-8 h-8 border-4 border-slate-900 border-t-transparent rounded-full animate-spin"></div>
                     </div>
                 ) : (
                     profile && (
-                        <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
                             
                             {/* Read-Only Academic Locking Card */}
-                            <div className="lg:col-span-1 space-y-6">
-                                <Card className="rounded-[28px] border-[#e8e8ed] bg-white p-6 shadow-[0_4px_24px_rgba(0,0,0,0.01)] relative overflow-hidden">
+                            <div className="lg:col-span-1">
+                                <Card className="rounded-2xl sm:rounded-[28px] border-[#e8e8ed] bg-white p-5 sm:p-6 shadow-[0_4px_24px_rgba(0,0,0,0.01)] relative overflow-hidden">
                                     <div className="flex flex-col items-center text-center">
-                                        <div className="h-16 w-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 border border-indigo-100 shadow-inner shrink-0">
-                                            <UserIcon className="w-8 h-8" />
+                                        <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-3 border border-indigo-100 shadow-inner shrink-0">
+                                            <UserIcon className="w-7 h-7 sm:w-8 sm:h-8" />
                                         </div>
-                                        <h3 className="font-extrabold text-gray-950 text-base leading-snug">
+                                        <h3 className="font-extrabold text-gray-955 text-base leading-snug">
                                             {profile.first_name} {profile.last_name}
                                         </h3>
                                         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">
@@ -257,30 +257,30 @@ export default function MySettingsPage() {
                                         </span>
                                     </div>
 
-                                    <div className="border-t border-gray-100 mt-6 pt-5 space-y-4 text-left">
+                                    <div className="border-t border-gray-100 mt-5 pt-4 space-y-3.5 text-left">
                                         <div>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Student ID</span>
+                                            <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Student ID</span>
                                             <div className="flex items-center gap-1.5 mt-1 text-gray-500 font-semibold text-sm">
                                                 <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                                 <span>{profile.coaching_id || 'N/A'}</span>
                                             </div>
                                         </div>
                                         <div>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">College ID</span>
+                                            <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest block">College ID</span>
                                             <div className="flex items-center gap-1.5 mt-1 text-gray-500 font-semibold text-sm">
                                                 <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                                 <span>{profile.student_id}</span>
                                             </div>
                                         </div>
                                         <div>
-                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Batch Program</span>
+                                            <span className="text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Batch Program</span>
                                             <div className="flex items-center gap-1.5 mt-1 text-gray-500 font-semibold text-sm">
                                                 <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                                 <span>{profile.batch_name} ({profile.batch_code})</span>
                                             </div>
                                         </div>
                                     </div>
-                                    <p className="text-[10px] text-[#86868b] leading-normal font-semibold mt-6 pt-4 border-t border-gray-100 flex items-start gap-1.5">
+                                    <p className="text-[10px] text-[#86868b] leading-normal font-semibold mt-5 pt-4 border-t border-gray-100 flex items-start gap-1.5">
                                         <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                                         <span>Academic and registration credentials cannot be edited by students. Contact the administration desk to request updates.</span>
                                     </p>
@@ -288,68 +288,68 @@ export default function MySettingsPage() {
                             </div>
 
                             {/* Editable Fields Form Card */}
-                            <div className="lg:col-span-2 space-y-6">
-                                <Card className="rounded-[28px] border-[#e8e8ed] bg-white p-6 sm:p-8 shadow-[0_4px_24px_rgba(0,0,0,0.01)]">
-                                    <CardHeader className="p-0 mb-6 flex flex-row items-center gap-2.5">
-                                        <Sparkles className="w-5 h-5 text-indigo-500" />
+                            <div className="lg:col-span-2">
+                                <Card className="rounded-2xl sm:rounded-[28px] border-[#e8e8ed] bg-white p-5 sm:p-8 shadow-[0_4px_24px_rgba(0,0,0,0.01)]">
+                                    <CardHeader className="p-0 mb-5 flex flex-row items-center gap-2">
+                                        <Sparkles className="w-4.5 h-4.5 text-indigo-500" />
                                         <CardTitle className="text-base font-extrabold text-gray-950">Personal Profile Settings</CardTitle>
                                     </CardHeader>
-                                    <CardContent className="p-0 space-y-6">
+                                    <CardContent className="p-0 space-y-5">
                                         {/* Row 1: Contact details */}
-                                        <div className="space-y-4">
-                                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest pb-1 flex items-center gap-1.5">
-                                                <Phone className="w-4 h-4 text-gray-400" />
+                                        <div className="space-y-3">
+                                            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pb-1 flex items-center gap-1.5">
+                                                <Phone className="w-3.5 h-3.5 text-gray-400" />
                                                 Contact Info
                                             </h4>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                                 <div>
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">Phone Number</label>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">Phone Number</label>
                                                     <Input
                                                         type="tel"
                                                         value={phone}
                                                         onChange={(e) => setPhone(e.target.value)}
                                                         placeholder="Enter phone number"
-                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm"
+                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm h-10"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">Email Address (Read-only)</label>
-                                                    <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-3.5 py-2.5 rounded-xl text-gray-500 text-sm font-semibold">
-                                                        <Mail className="w-4 h-4 text-gray-400" />
-                                                        <span>{profile.email}</span>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">Email Address (Read-only)</label>
+                                                    <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 px-3.5 py-2 rounded-xl text-gray-500 text-sm font-semibold h-10">
+                                                        <Mail className="w-4 h-4 text-gray-400 shrink-0" />
+                                                        <span className="truncate">{profile.email}</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
 
                                         {/* Row 2: Personal details */}
-                                        <div className="space-y-4 pt-2 border-t border-gray-100">
-                                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest pb-1 flex items-center gap-1.5">
-                                                <UserIcon className="w-4 h-4 text-gray-400" />
+                                        <div className="space-y-3 pt-3.5 border-t border-gray-100">
+                                            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pb-1 flex items-center gap-1.5">
+                                                <UserIcon className="w-3.5 h-3.5 text-gray-400" />
                                                 Personal Details
                                             </h4>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                                                 <div>
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">Guardian Name</label>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">Guardian Name</label>
                                                     <Input
                                                         type="text"
                                                         value={guardianName}
                                                         onChange={(e) => setGuardianName(e.target.value)}
                                                         placeholder="Enter guardian name"
-                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm"
+                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm h-10"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">Date of Birth</label>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">Date of Birth</label>
                                                     <Input
                                                         type="date"
                                                         value={dob}
                                                         onChange={(e) => setDob(e.target.value)}
-                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm"
+                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm h-10"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">Gender</label>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">Gender</label>
                                                     <select
                                                         value={gender}
                                                         onChange={(e) => setGender(e.target.value)}
@@ -365,51 +365,51 @@ export default function MySettingsPage() {
                                         </div>
 
                                         {/* Row 3: Address details */}
-                                        <div className="space-y-4 pt-2 border-t border-gray-100">
-                                            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest pb-1 flex items-center gap-1.5">
-                                                <MapPin className="w-4 h-4 text-gray-400" />
+                                        <div className="space-y-3 pt-3.5 border-t border-gray-100">
+                                            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pb-1 flex items-center gap-1.5">
+                                                <MapPin className="w-3.5 h-3.5 text-gray-400" />
                                                 Address Details
                                             </h4>
-                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                                                 <div className="sm:col-span-3">
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">Residential Address</label>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">Residential Address</label>
                                                     <Input
                                                         type="text"
                                                         value={address}
                                                         onChange={(e) => setAddress(e.target.value)}
                                                         placeholder="Enter residential address"
-                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm"
+                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm h-10"
                                                     />
                                                 </div>
                                                 <div className="sm:col-span-2">
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">State</label>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">State</label>
                                                     <Input
                                                         type="text"
                                                         value={state}
                                                         onChange={(e) => setState(e.target.value)}
                                                         placeholder="Enter state"
-                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm"
+                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm h-10"
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-xs font-extrabold text-gray-500 uppercase tracking-wide block mb-1.5">Pincode</label>
+                                                    <label className="text-[10px] font-extrabold text-gray-500 uppercase tracking-wide block mb-1">Pincode</label>
                                                     <Input
                                                         type="text"
                                                         value={pincode}
                                                         onChange={(e) => setPincode(e.target.value)}
                                                         placeholder="Enter pincode"
-                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm"
+                                                        className="rounded-xl border-gray-200 bg-gray-50/30 focus:bg-white text-sm h-10"
                                                     />
                                                 </div>
                                             </div>
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="border-t border-gray-100 pt-6 flex justify-end gap-3">
+                                        <div className="border-t border-gray-100 pt-5 flex justify-end">
                                             <Button
                                                 type="submit"
                                                 disabled={saving}
-                                                className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl shadow-lg font-bold text-xs px-6 py-3 flex items-center gap-2"
+                                                className="bg-gray-900 hover:bg-gray-800 text-white rounded-xl shadow-lg font-bold text-xs px-6 py-3 flex items-center justify-center gap-2 w-full sm:w-auto"
                                             >
                                                 {saving ? (
                                                     <>

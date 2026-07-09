@@ -241,6 +241,11 @@ export async function POST(request: NextRequest) {
             );
             const prefix = batchResult?.code || 'L1';
             coachingId = `${prefix}-${batchYear}-${rollNumber}`;
+        } else {
+            const parsed = parseCoachingId(coachingId);
+            if (parsed.isValid && parsed.normalizedId) {
+                coachingId = parsed.normalizedId;
+            }
         }
 
         // Check for duplicate coaching ID
@@ -458,6 +463,11 @@ export async function PUT(request: NextRequest) {
                 );
                 const prefix = batchResult?.code || 'L1';
                 cid = `${prefix}-${batchYear}-${rollNumber}`;
+            } else {
+                const parsed = parseCoachingId(cid);
+                if (parsed.isValid && parsed.normalizedId) {
+                    cid = parsed.normalizedId;
+                }
             }
             updateFields.push(`coaching_id = $${++paramCount}`);
             params.push(cid);

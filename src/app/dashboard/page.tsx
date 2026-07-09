@@ -331,21 +331,20 @@ export default function DashboardPage() {
                     {pendingPaymentsCount > 0 && (
                         <div 
                             onClick={() => router.push('/my-fees')}
-                            className="relative overflow-hidden group p-5 md:p-6 bg-gradient-to-br from-rose-500 to-red-600 rounded-3xl shadow-xl shadow-red-500/20 flex items-center justify-between gap-4 transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+                            className="relative overflow-hidden group p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between gap-3 transition-all duration-300 hover:border-rose-300 cursor-pointer shadow-sm"
                         >
-                            <div className="absolute top-0 right-0 -mt-8 -mr-8 w-32 h-32 md:w-48 md:h-48 bg-white/10 rounded-full blur-2xl md:blur-3xl"></div>
-                            <div className="relative flex items-center gap-4 md:gap-6">
-                                <div className="p-3 md:p-4 bg-white/20 backdrop-blur-md text-white rounded-2xl shrink-0">
-                                    <AlertTriangle className="w-6 h-6 md:w-8 md:h-8" />
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-rose-100 text-rose-700 rounded-xl shrink-0">
+                                    <AlertTriangle className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-white text-base md:text-lg">Action Required</h3>
-                                    <p className="text-rose-100 text-sm md:text-base font-medium mt-0.5 md:mt-1">
-                                        You have <span className="font-bold text-white">₹{totalPendingAmount.toLocaleString('en-IN')}</span> in pending fees.
+                                    <h3 className="font-bold text-rose-900 text-sm">Action Required</h3>
+                                    <p className="text-rose-700 text-xs mt-0.5">
+                                        You have <span className="font-bold">₹{totalPendingAmount.toLocaleString('en-IN')}</span> in pending fees.
                                     </p>
                                 </div>
                             </div>
-                            <ChevronRight className="relative w-5 h-5 md:w-6 md:h-6 text-white/70 group-hover:text-white group-hover:translate-x-1 transition-all shrink-0" />
+                            <ChevronRight className="w-4 h-4 text-rose-400 group-hover:text-rose-600 group-hover:translate-x-1 transition-all shrink-0" />
                         </div>
                     )}
 
@@ -437,7 +436,87 @@ export default function DashboardPage() {
         );
     }
 
-    // ── RENDER ADMIN & TEACHER VIEW ──
+    // ── RENDER TEACHER DASHBOARD VIEW ──
+    if (user.role === 'teacher') {
+        const cards = getCards();
+        const roleLabel = 'TEACHER';
+        return (
+            <div className="min-h-screen bg-[#f5f5f7] flex flex-col font-sans">
+                <MobileSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={handleLogout} />
+                <Navbar user={user} onMenuClick={() => setSidebarOpen(true)} onLogout={handleLogout} />
+
+                <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8 mt-16">
+                    {/* Hero / Welcome Section */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gray-900 text-white p-8 mb-8 shadow-xl">
+                        <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-blue-500 rounded-full mix-blend-screen filter blur-3xl opacity-30 animate-pulse"></div>
+                        <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-64 h-64 bg-purple-500 rounded-full mix-blend-screen filter blur-3xl opacity-30"></div>
+
+                        <div className="relative z-10">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <h1 className="text-2xl font-bold mb-2">
+                                        Hello, {user.firstName}! <span className="inline-block animate-wave">👋</span>
+                                    </h1>
+                                    <p className="text-blue-100 text-sm max-w-xl">
+                                        Welcome to your dashboard. You have <span className="font-semibold text-white">full access</span> to manage your academic duties.
+                                    </p>
+                                </div>
+                                <BookCheck className="hidden sm:block w-12 h-12 text-blue-200 opacity-80" />
+                            </div>
+
+                            <div className="mt-8 flex gap-3">
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-sm font-medium backdrop-blur-md">
+                                    <UsersRound className="w-4 h-4" />
+                                    {roleLabel}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-sm font-medium backdrop-blur-md">
+                                    <CalendarDays className="w-4 h-4" />
+                                    {mounted ? new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }) : ''}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Grid Title */}
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-xl font-bold text-gray-800">Quick Access</h2>
+                    </div>
+
+                    {/* Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {cards.map((card) => (
+                            <div
+                                key={card.id}
+                                onClick={() => router.push(card.href)}
+                                className={`group relative bg-white p-6 rounded-2xl shadow-sm border ${card.borderColor} hover:shadow-lg hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden`}
+                            >
+                                {/* Decorative gradient blob */}
+                                <div className={`absolute -right-8 -top-8 w-24 h-24 rounded-full bg-gradient-to-br ${card.gradient} opacity-20 group-hover:scale-150 transition-transform duration-500`}></div>
+
+                                <div className="relative flex items-start justify-between mb-4">
+                                    <div className={`p-3 rounded-xl bg-gradient-to-br ${card.gradient} ${card.textColor}`}>
+                                        {card.iconComponent}
+                                    </div>
+                                    <div className="p-2 rounded-full bg-gray-50 text-gray-300 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
+                                        <ChevronRight className="w-5 h-5" />
+                                    </div>
+                                </div>
+
+                                <h3 className="text-lg font-bold text-gray-900 mb-1">
+                                    {card.title}
+                                </h3>
+                                <p className="text-sm text-gray-500 leading-relaxed line-clamp-2">
+                                    {card.description}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </main>
+            </div>
+        );
+    }
+
+    // ── RENDER ADMIN VIEW ──
     return (
         <div className="min-h-screen bg-[#f5f5f7] flex flex-col font-sans">
             <MobileSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} user={user} onLogout={handleLogout} />
